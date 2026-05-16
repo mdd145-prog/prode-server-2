@@ -162,8 +162,6 @@ app.get('/webhook', (req, res) => {
 app.post('/webhook', async (req, res) => {
   res.sendStatus(200)
   try {
-    console.log("¡LLEGÓ UN MENSAJE DE META!", JSON.stringify(req.body, null, 2));
-
     const entry = req.body.entry?.[0]
     const changes = entry?.changes?.[0]
     const msg = changes?.value?.messages?.[0]
@@ -172,7 +170,7 @@ app.post('/webhook', async (req, res) => {
     const from = msg.from
     const texto = msg.text.body.trim().toLowerCase()
 
-    // CANDADO DE GRUPO DESACTIVADO PARA PRUEBAS DIRECTAS
+    // RESPONDER DIRECTAMENTE A LA PERSONA O GRUPO QUE ENVIÓ EL COMANDO
     if (texto === '!tabla') {
       const txt = await tablaTexto(false)
       await enviarMensaje(from, txt)
@@ -247,13 +245,15 @@ async function verificarPartidosEnVivo() {
 
         const partActualizado = { ...partido, goles1: g1, goles2: g2 }
         const msgFin = await mensajeFinPartido(partActualizado)
-        await enviarMensaje(process.env.GROUP_ID, msgFin)
-
-        setTimeout(async () => {
-          const board = await buildBoard()
-          const img = await generarTablaImagen(board, 'oficial')
-          await enviarImagen(process.env.GROUP_ID, img, '🏆 TABLA ACTUALIZADA')
-        }, 3000)
+        
+        if (process.env.GROUP_ID) {
+          await enviarMensaje(process.env.GROUP_ID, msgFin)
+          setTimeout(async () => {
+            const board = await buildBoard()
+            const img = await generarTablaImagen(board, 'oficial')
+            await enviarImagen(process.env.GROUP_ID, img, '🏆 TABLA ACTUALIZADA')
+          }, 3000)
+        }
       }
     }
   } catch (e) {
