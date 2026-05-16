@@ -21,7 +21,6 @@ async function enviarMensaje(to, texto) {
 }
 
 async function enviarImagen(to, imagenBuffer, caption) {
-  // Subir imagen como form-data
   const FormData = require('form-data')
   const form = new FormData()
   form.append('file', imagenBuffer, { filename: 'tabla.jpg', contentType: 'image/jpeg' })
@@ -82,12 +81,8 @@ async function tablaTexto(oficial = false) {
   const jugados = partidos.filter(p => p.goles1 !== null).length
   const total = partidos.length
 
-  // Partido en vivo (si existe)
   const ahora = new Date()
-  const enVivo = partidos.find(p => {
-    if (!p.en_vivo) return false
-    return true
-  })
+  const enVivo = partidos.find(p => p.en_vivo)
 
   const titulo = oficial ? '🏆 TABLA OFICIAL' : '📊 TABLA'
   const fecha = ahora.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })
@@ -157,7 +152,6 @@ async function mensajeFinPartido(partido) {
 // ── Webhook Meta ──────────────────────────────────────────
 app.get('/webhook', (req, res) => {
   const miContrasena = "MiProdeMundial2026";
-  
   if (req.query['hub.verify_token'] === miContrasena) {
     res.send(req.query['hub.challenge'])
   } else {
@@ -168,7 +162,6 @@ app.get('/webhook', (req, res) => {
 app.post('/webhook', async (req, res) => {
   res.sendStatus(200)
   try {
-    // Imprime todo lo que llega para auditar errores o sacar IDs
     console.log("¡LLEGÓ UN MENSAJE DE META!", JSON.stringify(req.body, null, 2));
 
     const entry = req.body.entry?.[0]
@@ -178,11 +171,8 @@ app.post('/webhook', async (req, res) => {
 
     const from = msg.from
     const texto = msg.text.body.trim().toLowerCase()
-    const groupId = process.env.GROUP_ID
 
-    // Solo responder si viene del grupo (Desactivado temporalmente para pruebas personales por chat privado)
-    // if (from !== groupId) return
-
+    // CANDADO DE GRUPO DESACTIVADO PARA PRUEBAS DIRECTAS
     if (texto === '!tabla') {
       const txt = await tablaTexto(false)
       await enviarMensaje(from, txt)
@@ -239,7 +229,6 @@ async function verificarPartidosEnVivo() {
       const g2 = f.goals.away
       const minuto = f.fixture.status.elapsed
 
-      // Buscar partido en nuestra DB por equipos
       const { data: partido } = await supabase.from('partidos')
         .select('*')
         .ilike('equipo1', `%${home.slice(0,4)}%`)
@@ -248,22 +237,18 @@ async function verificarPartidosEnVivo() {
 
       if (!partido) continue
 
-      // Actualizar goles en tiempo real
       if (['1H','HT','2H','ET','BT','P'].includes(status)) {
         await supabase.from('partidos').update({ goles1: g1, goles2: g2, en_vivo: true, minuto }).eq('id', partido.id)
       }
 
-      // Partido finalizado
       if (status === 'FT' && !partidosFinalizados.has(apiId)) {
         partidosFinalizados.add(apiId)
         await supabase.from('partidos').update({ goles1: g1, goles2: g2, en_vivo: false, minuto: null }).eq('id', partido.id)
 
-        // Mandar resultado al grupo
         const partActualizado = { ...partido, goles1: g1, goles2: g2 }
         const msgFin = await mensajeFinPartido(partActualizado)
         await enviarMensaje(process.env.GROUP_ID, msgFin)
 
-        // Esperar 3 segundos y mandar tabla oficial como imagen
         setTimeout(async () => {
           const board = await buildBoard()
           const img = await generarTablaImagen(board, 'oficial')
@@ -276,7 +261,6 @@ async function verificarPartidosEnVivo() {
   }
 }
 
-// Polling adaptativo: cada 2 min durante el día del partido
 cron.schedule('*/2 * * * *', async () => {
   const hora = new Date().getHours()
   if (hora >= 12 && hora <= 23) {
@@ -284,7 +268,6 @@ cron.schedule('*/2 * * * *', async () => {
   }
 })
 
-// ── Cargar fixture inicial en DB ──────────────────────────
 app.post('/admin/cargar-fixture', async (req, res) => {
   const { partidos } = req.body
   if (!partidos) return res.status(400).json({ error: 'Falta partidos' })
@@ -293,7 +276,6 @@ app.post('/admin/cargar-fixture', async (req, res) => {
   res.json({ ok: true, count: partidos.length })
 })
 
-// ── Sincronizar jugadores y pronósticos desde app ─────────
 app.post('/admin/sync', async (req, res) => {
   const { jugadores, pronosticos } = req.body
   if (jugadores) await supabase.from('jugadores').upsert(jugadores)
@@ -314,7 +296,6 @@ app.post('/admin/sync', async (req, res) => {
   res.json({ ok: true })
 })
 
-// ── Health check ──────────────────────────────────────────
 app.get('/', (req, res) => res.json({ status: 'ok', app: 'Prode Bot 2026' }))
 
 const PORT = process.env.PORT || 3000
