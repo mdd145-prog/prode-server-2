@@ -155,8 +155,12 @@ async function mensajeFinPartido(partido) {
 }
 
 // ── Webhook Meta ──────────────────────────────────────────
+// ── Webhook Meta ──────────────────────────────────────────
 app.get('/webhook', (req, res) => {
-  if (req.query['hub.verify_token'] === process.env.WA_VERIFY_TOKEN) {
+  // Ponemos la contraseña fija directamente acá
+  const miContrasena = "MiProdeMundial2026";
+  
+  if (req.query['hub.verify_token'] === miContrasena) {
     res.send(req.query['hub.challenge'])
   } else {
     res.sendStatus(403)
