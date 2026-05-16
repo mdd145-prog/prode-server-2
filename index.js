@@ -170,6 +170,10 @@ app.get('/webhook', (req, res) => {
 app.post('/webhook', async (req, res) => {
   res.sendStatus(200)
   try {
+    // ESTA LÍNEA NUEVA IMPRIME TODO LO QUE LLEGA EN LA PANTALLA NEGRA
+    console.log("¡LLEGÓ UN MENSAJE DE META!", JSON.stringify(req.body, null, 2));
+
+    const entry = req.body.entry?.[0]
     const entry = req.body.entry?.[0]
     const changes = entry?.changes?.[0]
     const msg = changes?.value?.messages?.[0]
