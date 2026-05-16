@@ -155,9 +155,7 @@ async function mensajeFinPartido(partido) {
 }
 
 // ── Webhook Meta ──────────────────────────────────────────
-// ── Webhook Meta ──────────────────────────────────────────
 app.get('/webhook', (req, res) => {
-  // Ponemos la contraseña fija directamente acá
   const miContrasena = "MiProdeMundial2026";
   
   if (req.query['hub.verify_token'] === miContrasena) {
@@ -170,10 +168,9 @@ app.get('/webhook', (req, res) => {
 app.post('/webhook', async (req, res) => {
   res.sendStatus(200)
   try {
-    // ESTA LÍNEA NUEVA IMPRIME TODO LO QUE LLEGA EN LA PANTALLA NEGRA
+    // Imprime todo lo que llega para auditar errores o sacar IDs
     console.log("¡LLEGÓ UN MENSAJE DE META!", JSON.stringify(req.body, null, 2));
 
-    const entry = req.body.entry?.[0]
     const entry = req.body.entry?.[0]
     const changes = entry?.changes?.[0]
     const msg = changes?.value?.messages?.[0]
@@ -183,30 +180,30 @@ app.post('/webhook', async (req, res) => {
     const texto = msg.text.body.trim().toLowerCase()
     const groupId = process.env.GROUP_ID
 
-    // Solo responder si viene del grupo
-    if (from !== groupId) return
+    // Solo responder si viene del grupo (Desactivado temporalmente para pruebas personales por chat privado)
+    // if (from !== groupId) return
 
     if (texto === '!tabla') {
       const txt = await tablaTexto(false)
-      await enviarMensaje(groupId, txt)
+      await enviarMensaje(from, txt)
     }
     else if (texto === '!oficial') {
       const board = await buildBoard()
       const img = await generarTablaImagen(board, 'oficial')
-      await enviarImagen(groupId, img, '🏆 TABLA OFICIAL — PRODE MUNDIAL 2026')
+      await enviarImagen(from, img, '🏆 TABLA OFICIAL — PRODE MUNDIAL 2026')
     }
     else if (texto === '!hoy') {
       const hoy = new Date().toISOString().slice(0, 10)
       const txt = await tablaDiaTexto(hoy)
-      await enviarMensaje(groupId, txt)
+      await enviarMensaje(from, txt)
     }
     else if (texto.startsWith('!dia ')) {
       const fecha = texto.replace('!dia ', '').trim()
       const txt = await tablaDiaTexto(fecha)
-      await enviarMensaje(groupId, txt)
+      await enviarMensaje(from, txt)
     }
     else if (texto === '!ayuda') {
-      await enviarMensaje(groupId,
+      await enviarMensaje(from,
         `🤖 *Comandos disponibles:*\n\n` +
         `!tabla → Tabla de posiciones\n` +
         `!oficial → Tabla oficial (imagen)\n` +
@@ -289,7 +286,6 @@ cron.schedule('*/2 * * * *', async () => {
 
 // ── Cargar fixture inicial en DB ──────────────────────────
 app.post('/admin/cargar-fixture', async (req, res) => {
-  // Este endpoint lo llama la app admin para sincronizar los partidos
   const { partidos } = req.body
   if (!partidos) return res.status(400).json({ error: 'Falta partidos' })
   const { error } = await supabase.from('partidos').upsert(partidos)
