@@ -318,6 +318,16 @@ app.post('/admin/sync', async (req, res) => {
   res.json({ ok: true })
 })
 
+// ── SMS entrante (para capturar código de verificación de Meta) ───────────────
+app.post('/sms', express.urlencoded({ extended: false }), (req, res) => {
+  console.log('=== SMS ENTRANTE ===')
+  console.log('De:', req.body.From)
+  console.log('Para:', req.body.To)
+  console.log('Mensaje:', req.body.Body)
+  console.log('===================')
+  res.sendStatus(200)
+})
+
 // ── Health check ──────────────────────────────────────────
 app.get('/', (req, res) => res.json({ status: 'ok', app: 'Prode Bot 2026' }))
 
