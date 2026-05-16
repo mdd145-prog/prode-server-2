@@ -21,6 +21,7 @@ async function enviarMensaje(to, texto) {
 }
 
 async function enviarImagen(to, imagenBuffer, caption) {
+  // Subir imagen como form-data
   const FormData = require('form-data')
   const form = new FormData()
   form.append('file', imagenBuffer, { filename: 'tabla.jpg', contentType: 'image/jpeg' })
@@ -81,8 +82,12 @@ async function tablaTexto(oficial = false) {
   const jugados = partidos.filter(p => p.goles1 !== null).length
   const total = partidos.length
 
+  // Partido en vivo (si existe)
   const ahora = new Date()
-  const enVivo = partidos.find(p => p.en_vivo)
+  const enVivo = partidos.find(p => {
+    if (!p.en_vivo) return false
+    return true
+  })
 
   const titulo = oficial ? '🏆 TABLA OFICIAL' : '📊 TABLA'
   const fecha = ahora.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })
@@ -151,8 +156,7 @@ async function mensajeFinPartido(partido) {
 
 // ── Webhook Meta ──────────────────────────────────────────
 app.get('/webhook', (req, res) => {
-  const miContrasena = "MiProdeMundial2026";
-  if (req.query['hub.verify_token'] === miContrasena) {
+  if (req.query['hub.verify_token'] === process.env.WA_VERIFY_TOKEN) {
     res.send(req.query['hub.challenge'])
   } else {
     res.sendStatus(403)
@@ -162,36 +166,47 @@ app.get('/webhook', (req, res) => {
 app.post('/webhook', async (req, res) => {
   res.sendStatus(200)
   try {
+    console.log('WEBHOOK RECIBIDO:', JSON.stringify(req.body, null, 2))
     const entry = req.body.entry?.[0]
     const changes = entry?.changes?.[0]
     const msg = changes?.value?.messages?.[0]
-    if (!msg || msg.type !== 'text') return
+    if (!msg || msg.type !== 'text') {
+      console.log('No hay mensaje de texto')
+      return
+    }
 
     const from = msg.from
     const texto = msg.text.body.trim().toLowerCase()
+    const groupId = process.env.GROUP_ID
+    console.log('FROM:', from, 'TEXTO:', texto, 'GROUP_ID configurado:', groupId)
 
-    // RESPONDER DIRECTAMENTE A LA PERSONA O GRUPO QUE ENVIÓ EL COMANDO
+    // Solo responder si viene del grupo
+    if (from !== groupId) {
+      console.log('Mensaje ignorado - no coincide GROUP_ID')
+      return
+    }
+
     if (texto === '!tabla') {
       const txt = await tablaTexto(false)
-      await enviarMensaje(from, txt)
+      await enviarMensaje(groupId, txt)
     }
     else if (texto === '!oficial') {
       const board = await buildBoard()
       const img = await generarTablaImagen(board, 'oficial')
-      await enviarImagen(from, img, '🏆 TABLA OFICIAL — PRODE MUNDIAL 2026')
+      await enviarImagen(groupId, img, '🏆 TABLA OFICIAL — PRODE MUNDIAL 2026')
     }
     else if (texto === '!hoy') {
       const hoy = new Date().toISOString().slice(0, 10)
       const txt = await tablaDiaTexto(hoy)
-      await enviarMensaje(from, txt)
+      await enviarMensaje(groupId, txt)
     }
     else if (texto.startsWith('!dia ')) {
       const fecha = texto.replace('!dia ', '').trim()
       const txt = await tablaDiaTexto(fecha)
-      await enviarMensaje(from, txt)
+      await enviarMensaje(groupId, txt)
     }
     else if (texto === '!ayuda') {
-      await enviarMensaje(from,
+      await enviarMensaje(groupId,
         `🤖 *Comandos disponibles:*\n\n` +
         `!tabla → Tabla de posiciones\n` +
         `!oficial → Tabla oficial (imagen)\n` +
@@ -227,6 +242,7 @@ async function verificarPartidosEnVivo() {
       const g2 = f.goals.away
       const minuto = f.fixture.status.elapsed
 
+      // Buscar partido en nuestra DB por equipos
       const { data: partido } = await supabase.from('partidos')
         .select('*')
         .ilike('equipo1', `%${home.slice(0,4)}%`)
@@ -235,25 +251,27 @@ async function verificarPartidosEnVivo() {
 
       if (!partido) continue
 
+      // Actualizar goles en tiempo real
       if (['1H','HT','2H','ET','BT','P'].includes(status)) {
         await supabase.from('partidos').update({ goles1: g1, goles2: g2, en_vivo: true, minuto }).eq('id', partido.id)
       }
 
+      // Partido finalizado
       if (status === 'FT' && !partidosFinalizados.has(apiId)) {
         partidosFinalizados.add(apiId)
         await supabase.from('partidos').update({ goles1: g1, goles2: g2, en_vivo: false, minuto: null }).eq('id', partido.id)
 
+        // Mandar resultado al grupo
         const partActualizado = { ...partido, goles1: g1, goles2: g2 }
         const msgFin = await mensajeFinPartido(partActualizado)
-        
-        if (process.env.GROUP_ID) {
-          await enviarMensaje(process.env.GROUP_ID, msgFin)
-          setTimeout(async () => {
-            const board = await buildBoard()
-            const img = await generarTablaImagen(board, 'oficial')
-            await enviarImagen(process.env.GROUP_ID, img, '🏆 TABLA ACTUALIZADA')
-          }, 3000)
-        }
+        await enviarMensaje(process.env.GROUP_ID, msgFin)
+
+        // Esperar 3 segundos y mandar tabla oficial como imagen
+        setTimeout(async () => {
+          const board = await buildBoard()
+          const img = await generarTablaImagen(board, 'oficial')
+          await enviarImagen(process.env.GROUP_ID, img, '🏆 TABLA ACTUALIZADA')
+        }, 3000)
       }
     }
   } catch (e) {
@@ -261,6 +279,7 @@ async function verificarPartidosEnVivo() {
   }
 }
 
+// Polling adaptativo: cada 2 min durante el día del partido
 cron.schedule('*/2 * * * *', async () => {
   const hora = new Date().getHours()
   if (hora >= 12 && hora <= 23) {
@@ -268,7 +287,9 @@ cron.schedule('*/2 * * * *', async () => {
   }
 })
 
+// ── Cargar fixture inicial en DB ──────────────────────────
 app.post('/admin/cargar-fixture', async (req, res) => {
+  // Este endpoint lo llama la app admin para sincronizar los partidos
   const { partidos } = req.body
   if (!partidos) return res.status(400).json({ error: 'Falta partidos' })
   const { error } = await supabase.from('partidos').upsert(partidos)
@@ -276,6 +297,7 @@ app.post('/admin/cargar-fixture', async (req, res) => {
   res.json({ ok: true, count: partidos.length })
 })
 
+// ── Sincronizar jugadores y pronósticos desde app ─────────
 app.post('/admin/sync', async (req, res) => {
   const { jugadores, pronosticos } = req.body
   if (jugadores) await supabase.from('jugadores').upsert(jugadores)
@@ -296,6 +318,7 @@ app.post('/admin/sync', async (req, res) => {
   res.json({ ok: true })
 })
 
+// ── Health check ──────────────────────────────────────────
 app.get('/', (req, res) => res.json({ status: 'ok', app: 'Prode Bot 2026' }))
 
 const PORT = process.env.PORT || 3000
