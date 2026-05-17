@@ -178,36 +178,38 @@ app.post('/webhook', async (req, res) => {
     const from = msg.from
     const texto = msg.text.body.trim().toLowerCase()
     const groupId = process.env.GROUP_ID
-    console.log('FROM:', from, 'TEXTO:', texto, 'GROUP_ID configurado:', groupId)
+    const testingMode = !groupId            // sin GROUP_ID = modo testing 1-a-1
+    const respondTo = testingMode ? from : groupId
 
-    // Solo responder si viene del grupo
-    if (from !== groupId) {
+    console.log('FROM:', from, 'TEXTO:', texto, 'TESTING:', testingMode, 'RESPONDE A:', respondTo)
+
+    if (!testingMode && from !== groupId) {
       console.log('Mensaje ignorado - no coincide GROUP_ID')
       return
     }
 
     if (texto === '!tabla') {
       const txt = await tablaTexto(false)
-      await enviarMensaje(groupId, txt)
+      await enviarMensaje(respondTo, txt)
     }
     else if (texto === '!oficial') {
       const board = await buildBoard()
       const img = await generarTablaImagen(board, 'oficial')
-      await enviarImagen(groupId, img, '🏆 TABLA OFICIAL — PRODE MUNDIAL 2026')
+      await enviarImagen(respondTo, img, '🏆 TABLA OFICIAL — PRODE MUNDIAL 2026')
     }
     else if (texto === '!hoy') {
       const hoy = new Date().toISOString().slice(0, 10)
       const txt = await tablaDiaTexto(hoy)
-      await enviarMensaje(groupId, txt)
+      await enviarMensaje(respondTo, txt)
     }
     else if (texto.startsWith('!dia ')) {
       const fecha = texto.replace('!dia ', '').trim()
       const txt = await tablaDiaTexto(fecha)
-      await enviarMensaje(groupId, txt)
+      await enviarMensaje(respondTo, txt)
     }
-    else if (texto === '!ayuda') {
-      await enviarMensaje(groupId,
-        `🤖 *Comandos disponibles:*\n\n` +
+    else if (texto === '!ayuda' || texto === 'hola' || texto === 'ping') {
+      await enviarMensaje(respondTo,
+        `🤖 *Prode Mundial 2026 — Comandos:*\n\n` +
         `!tabla → Tabla de posiciones\n` +
         `!oficial → Tabla oficial (imagen)\n` +
         `!hoy → Partidos de hoy\n` +
@@ -215,8 +217,14 @@ app.post('/webhook', async (req, res) => {
         `!ayuda → Este mensaje`
       )
     }
+    else {
+      // En testing, contestar algo para confirmar que llega
+      if (testingMode) {
+        await enviarMensaje(respondTo, `Recibí: "${texto}". Probá con !ayuda`)
+      }
+    }
   } catch (e) {
-    console.error('Webhook error:', e.message)
+    console.error('Webhook error:', e.response?.data || e.message)
   }
 })
 
@@ -261,16 +269,16 @@ async function verificarPartidosEnVivo() {
         partidosFinalizados.add(apiId)
         await supabase.from('partidos').update({ goles1: g1, goles2: g2, en_vivo: false, minuto: null }).eq('id', partido.id)
 
-        // Mandar resultado al grupo
+        // Mandar resultado al grupo (solo si hay GROUP_ID configurado)
         const partActualizado = { ...partido, goles1: g1, goles2: g2 }
         const msgFin = await mensajeFinPartido(partActualizado)
-        await enviarMensaje(process.env.GROUP_ID, msgFin)
+        if (process.env.GROUP_ID) await enviarMensaje(process.env.GROUP_ID, msgFin)
 
         // Esperar 3 segundos y mandar tabla oficial como imagen
         setTimeout(async () => {
           const board = await buildBoard()
           const img = await generarTablaImagen(board, 'oficial')
-          await enviarImagen(process.env.GROUP_ID, img, '🏆 TABLA ACTUALIZADA')
+          if (process.env.GROUP_ID) await enviarImagen(process.env.GROUP_ID, img, '🏆 TABLA ACTUALIZADA')
         }, 3000)
       }
     }
