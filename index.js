@@ -139,7 +139,7 @@ async function enviarAlGrupo(texto) {
 async function enviarImagenAlGrupo(buffer, caption) {
   const g = process.env.GROUP_ID
   if (!g || !botSock) return console.log('⚠ GROUP_ID o bot no disponible')
-  await botSock.sendMessage(g, { image: buffer, caption, mimetype: 'image/jpeg' })
+  await botSock.sendMessage(g, { image: buffer, caption, mimetype: 'image/png' })
 }
 
 // ── Handler de mensajes ───────────────────────────────────
@@ -173,7 +173,7 @@ async function handleMessage(sock, msg) {
   console.log(`🤖 CMD: "${texto}"`)
 
   const sendText  = async t => await sock.sendMessage(respondTo, { text: t })
-  const sendImage = async (buf, cap) => await sock.sendMessage(respondTo, { image: buf, caption: cap, mimetype: 'image/jpeg' })
+  const sendImage = async (buf, cap) => await sock.sendMessage(respondTo, { image: buf, caption: cap, mimetype: 'image/png' })
 
   try {
     if (texto === '!tabla') {
@@ -361,11 +361,15 @@ async function conectarBot() {
       botSock  = null
       const code = new Boom(lastDisconnect?.error)?.output?.statusCode
       console.log('Desconectado. Código:', code)
-      if (code !== DisconnectReason.loggedOut) {
+      if (code === 405 || code === DisconnectReason.loggedOut) {
+        // Sesión inválida — limpiar credenciales para forzar QR nuevo
+        const fs = require('fs')
+        try { fs.rmSync('./auth_baileys', { recursive: true, force: true }); console.log('🗑 Credenciales limpiadas') } catch(e) {}
+        console.log('Reconectando para nuevo QR...')
+        setTimeout(conectarBot, 3000)
+      } else {
         console.log('Reconectando en 5s...')
         setTimeout(conectarBot, 5000)
-      } else {
-        console.log('⚠️ Sesión cerrada. Borrá la carpeta auth_baileys y reiniciá.')
       }
     } else if (connection === 'open') {
       ultimoQR = null
