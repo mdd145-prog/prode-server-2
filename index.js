@@ -177,13 +177,8 @@ async function handleMessage(sock, msg) {
 
   try {
     if (texto === '!tabla') {
-      await sendText(await tablaTexto())
-    }
-    else if (texto === '!oficial') {
-      const board = await buildBoard()
-      if (!board.length) { await sendText('No hay datos aún'); return }
-      const img = await generarTablaImagen(board, 'oficial')
-      await sendImage(img, '🏆 TABLA OFICIAL — PRODE MUNDIAL 2026')
+      const txt = await tablaTexto()
+      await sendText(txt + '\n\n⚠️ _Esta tabla es NO OFICIAL. Se actualiza cada 2 min durante los partidos._')
     }
     else if (texto === '!hoy') {
       await sendText(await tablaDiaTexto(new Date().toISOString().slice(0, 10)))
@@ -191,12 +186,33 @@ async function handleMessage(sock, msg) {
     else if (texto.startsWith('!dia ')) {
       await sendText(await tablaDiaTexto(texto.replace('!dia ', '').trim()))
     }
+    else if (texto === '!chances') {
+      await sendText(await chancesTexto())
+    }
     else if (texto === '!ayuda' || texto === 'hola' || texto === 'ping') {
       await sendText(
         `🤖 *Prode Mundial 2026 — Comandos:*\n\n` +
-        `!tabla → Tabla de posiciones\n!oficial → Tabla (imagen)\n` +
-        `!hoy → Partidos de hoy\n!dia YYYY-MM-DD → Partidos de fecha\n!ayuda → Este mensaje`
+        `!tabla → Tabla NO OFICIAL (en vivo)\n` +
+        `!hoy → Partidos de hoy + pronósticos\n` +
+        `!dia YYYY-MM-DD → Partidos de una fecha\n` +
+        `!chances → Quién sigue en carrera\n` +
+        `!ayuda → Este mensaje`
       )
+    }
+    else if (senderIsAdmin && texto === '!oficial') {
+      if (!groupId) { await sendText('❌ GROUP_ID no configurado'); return }
+      const board = await buildBoard()
+      if (!board.length) { await sendText('No hay datos aún'); return }
+      const img = await generarTablaImagen(board, 'oficial')
+      await enviarImagenAlGrupo(img, '🏆 TABLA OFICIAL — PRODE MUNDIAL 2026')
+      if (isPrivateAdmin) await sendText('✅ Tabla oficial enviada al grupo')
+    }
+    else if (senderIsAdmin && texto === '!resumen') {
+      if (!groupId) { await sendText('❌ GROUP_ID no configurado'); return }
+      const hoy = new Date().toISOString().slice(0, 10)
+      const txt = await tablaDiaTexto(hoy)
+      await enviarAlGrupo(txt)
+      if (isPrivateAdmin) await sendText('✅ Resumen enviado al grupo')
     }
     else if (senderIsAdmin && texto === '!forzar') {
       if (!groupId) { await sendText('❌ GROUP_ID no configurado'); return }
@@ -273,6 +289,30 @@ async function handleResultadoManual(sock, texto, respondTo) {
 // ── Polling football-data.org ─────────────────────────────
 const finalizados = new Set()
 
+
+async function chancesTexto() {
+  const board = await buildBoard()
+  const { data: partidos } = await supabase.from('partidos').select('*')
+  const rem = (partidos || []).filter(p => p.goles1 === null).length
+  if (!board.length) return 'No hay datos aún.'
+  const top = board[0].tot
+  const lines = ['🎯 *CHANCES DE GANAR — PRODE 2026*', '']
+  let hayAlguno = false
+  board.forEach((p, i) => {
+    const maxP = p.tot + rem * 3
+    const puede = maxP >= top
+    if (puede) {
+      const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i+1}.`
+      lines.push(`${medal} *${p.nombre || p.name}* — ${p.tot}pts (máx ${maxP})`)
+      hayAlguno = true
+    }
+  })
+  if (!hayAlguno) lines.push('_Nadie puede ganar... algo salió muy mal_ 😅')
+  lines.push('')
+  lines.push(`_${rem} partidos restantes · Exacto=3pts_`)
+  return lines.join('\n')
+}
+
 async function verificarPartidosEnVivo(forzar = false) {
   if (!process.env.FOOTBALL_API_KEY) { if (forzar) console.log('⚠ FOOTBALL_API_KEY no configurada'); return }
   try {
@@ -322,8 +362,20 @@ async function verificarPartidosEnVivo(forzar = false) {
   }
 }
 
-cron.schedule('*/10 * * * *', async () => {
+cron.schedule('*/2 * * * *', async () => {
   if (new Date().getHours() >= 12) await verificarPartidosEnVivo()
+})
+
+// Cron 8am Argentina (11am UTC) — manda resumen del dia si hay partidos
+cron.schedule('0 11 * * *', async () => {
+  try {
+    const hoy = new Date().toISOString().slice(0, 10)
+    const { data: partidos } = await supabase.from('partidos').select('*').eq('fecha', hoy)
+    if (!partidos || partidos.length === 0) return
+    console.log('Enviando resumen del dia:', hoy)
+    const txt = await tablaDiaTexto(hoy)
+    await enviarAlGrupo(txt)
+  } catch(e) { console.error('Error cron 8am:', e.message) }
 })
 
 // ── Conexión WhatsApp (Baileys) ────────────────────────────
