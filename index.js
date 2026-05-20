@@ -1,5 +1,5 @@
 require('dotenv').config()
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, Browsers } = require('@whiskeysockets/baileys')
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, Browsers, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys')
 const { Boom } = require('@hapi/boom')
 const QRCode = require('qrcode')
 const pino = require('pino')
@@ -330,12 +330,23 @@ cron.schedule('*/10 * * * *', async () => {
 async function conectarBot() {
   const { state, saveCreds } = await useMultiFileAuthState('./auth_baileys')
 
+  // Obtener versión actual de WhatsApp Web (evita error 405)
+  let version = [2, 3000, 1015901307]
+  try {
+    const latest = await fetchLatestBaileysVersion()
+    version = latest.version
+    console.log(`📱 WA versión: ${version.join('.')}`)
+  } catch(e) {
+    console.log('⚠ No se pudo obtener versión WA, usando fallback')
+  }
+
   const sock = makeWASocket({
+    version,
     auth: state,
-    printQRInTerminal: true,
     logger: pino({ level: 'silent' }),
-    browser: Browsers.ubuntu('Chrome'),
+    browser: Browsers.macOS('Desktop'),
     connectTimeoutMs: 60000,
+    defaultQueryTimeoutMs: undefined,
   })
 
   sock.ev.on('creds.update', saveCreds)
