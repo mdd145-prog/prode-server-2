@@ -1,4 +1,4 @@
-const { createCanvas } = require('canvas')
+const { createCanvas } = require('@napi-rs/canvas')
 
 async function generarTablaImagen(board, tipo = 'oficial') {
   const isOficial   = tipo === 'oficial'
@@ -136,7 +136,7 @@ async function generarTablaImagen(board, tipo = 'oficial') {
   ctx.textBaseline = 'middle'
   ctx.fillText(`PRODE MUNDIAL 2026  |  ${fecha}  |  Exacto=3pts  Levante=1pt`, W / 2, footerY + FOOTER_H / 2)
 
-  const buffer = canvas.toBuffer('image/png')
+  const buffer = await canvas.encode('png')
   console.log(`📊 tablaImagen: board=${board.length} W=${W} H=${H} bytes=${buffer.length}`)
   return buffer
 }
