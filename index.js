@@ -1,6 +1,7 @@
 require('dotenv').config()
 const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js')
 const qrcode = require('qrcode-terminal')
+const QRCode = require('qrcode')
 const express = require('express')
 const cron = require('node-cron')
 const { createClient } = require('@supabase/supabase-js')
@@ -44,6 +45,9 @@ const TEAM_MAP = {
 }
 const mapTeam = n => TEAM_MAP[n] || n
 
+// ── QR storage ────────────────────────────────────────────
+let ultimoQR = null
+
 // ── WhatsApp Client ───────────────────────────────────────
 const client = new Client({
   authStrategy: new LocalAuth(),
@@ -57,9 +61,10 @@ const client = new Client({
 })
 
 client.on('qr', qr => {
-  console.log('\n=== ESCANEAR QR DESDE WHATSAPP ===')
+  ultimoQR = qr
+  console.log('\n=== QR LISTO — abrí en el navegador: https://prode-server-2.onrender.com/qr ===\n')
   qrcode.generate(qr, { small: true })
-  console.log('===================================\n')
+  console.log('=========================================================================\n')
 })
 client.on('ready',        () => console.log('✅ Bot conectado!'))
 client.on('auth_failure', m  => console.error('❌ Auth error:', m))
@@ -338,6 +343,34 @@ app.post('/admin/sync', async (req, res) => {
     }
   }
   res.json({ ok: true })
+})
+
+// ── QR endpoint (para escanear desde el navegador) ───────
+app.get('/qr', async (req, res) => {
+  if (!ultimoQR) {
+    return res.send(`
+      <html><body style="background:#1a1a2e;color:white;font-family:sans-serif;text-align:center;padding:40px">
+        <h2>⚽ Prode Bot</h2>
+        <p>Bot ya conectado, o QR aún no generado.</p>
+        <p>Refrescá en 15 segundos.</p>
+        <script>setTimeout(()=>location.reload(), 15000)</script>
+      </body></html>`)
+  }
+  try {
+    const imgUrl = await QRCode.toDataURL(ultimoQR, { width: 350 })
+    res.send(`
+      <html><head><title>QR Prode Bot</title></head>
+      <body style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;background:#1a1a2e;color:white;font-family:sans-serif;gap:16px;margin:0">
+        <h2 style="margin:0">⚽ Prode Bot — Vincular WhatsApp</h2>
+        <img src="${imgUrl}" style="border:8px solid white;border-radius:12px"/>
+        <p style="text-align:center;max-width:300px;color:#aaa">En el iPhone X: WhatsApp → Ajustes → Dispositivos vinculados → Vincular un dispositivo</p>
+        <p style="color:#f0c030;font-size:13px">El QR expira en ~60 segundos</p>
+        <button onclick="location.reload()" style="padding:10px 24px;background:#6a0dad;color:white;border:none;border-radius:8px;cursor:pointer;font-size:14px;font-weight:bold">🔄 Refrescar QR</button>
+        <script>setTimeout(()=>location.reload(), 55000)</script>
+      </body></html>`)
+  } catch(e) {
+    res.status(500).send('Error generando QR: ' + e.message)
+  }
 })
 
 app.get('/', (req, res) => res.json({ status: 'ok', app: 'Prode Bot 2026' }))
