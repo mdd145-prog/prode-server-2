@@ -136,7 +136,9 @@ async function generarTablaImagen(board, tipo = 'oficial') {
   ctx.textBaseline = 'middle'
   ctx.fillText(`PRODE MUNDIAL 2026  |  ${fecha}  |  Exacto=3pts  Levante=1pt`, W / 2, footerY + FOOTER_H / 2)
 
-  return canvas.toBuffer('image/jpeg', { quality: 0.92 })
+  const buffer = canvas.toBuffer('image/png')
+  console.log(`📊 tablaImagen: board=${board.length} W=${W} H=${H} bytes=${buffer.length}`)
+  return buffer
 }
 
 module.exports = { generarTablaImagen }
