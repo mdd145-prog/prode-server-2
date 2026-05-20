@@ -168,13 +168,13 @@ client.on('message', async msg => {
   const groupId     = process.env.GROUP_ID
   const testingMode = !groupId
 
-  if (msg.isGroupMsg) {
+  if (msg.from.endsWith('@g.us')) {
     console.log(`📨 GRUPO ID: ${msg.from}`)
   }
 
   const isFromGroup    = msg.from === groupId
-  const isPrivateAdmin = !msg.isGroupMsg && msg.from === ADMIN_JID
-  const isGroupAdmin   = msg.isGroupMsg && msg.author === ADMIN_JID
+  const isPrivateAdmin = !msg.from.endsWith('@g.us') && msg.from === ADMIN_JID
+  const isGroupAdmin   = msg.from.endsWith('@g.us') && msg.author === ADMIN_JID
   const senderIsAdmin  = isPrivateAdmin || isGroupAdmin
 
   if (!testingMode && !isFromGroup && !isPrivateAdmin) return
