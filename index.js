@@ -170,7 +170,7 @@ async function handleMessage(sock, msg) {
   ).trim().toLowerCase()
 
   const respondTo = from
-  console.log(`🤖 CMD: "${texto}"`)
+  console.log(`🤖 CMD: "${texto}" | sender: ${sender} | admin: ${ADMIN_JID} | isAdmin: ${senderIsAdmin}`)
 
   const sendText  = async t => await sock.sendMessage(respondTo, { text: t })
   const sendImage = async (buf, cap) => await sock.sendMessage(respondTo, { image: buf, caption: cap, mimetype: 'image/png' })
@@ -322,7 +322,7 @@ async function verificarPartidosEnVivo(forzar = false) {
   }
 }
 
-cron.schedule('*/2 * * * *', async () => {
+cron.schedule('*/10 * * * *', async () => {
   if (new Date().getHours() >= 12) await verificarPartidosEnVivo()
 })
 
