@@ -322,7 +322,7 @@ async function verificarPartidosEnVivo(forzar = false) {
   }
 }
 
-cron.schedule('*/10 * * * *', async () => {
+cron.schedule('*/2 * * * *', async () => {
   if (new Date().getHours() >= 12) await verificarPartidosEnVivo()
 })
 
