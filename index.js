@@ -17,7 +17,7 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY
 
 // ── Constantes ────────────────────────────────────────────
 const ADMIN_NUMBER = '5491157671081'
-const ADMIN_JID    = `${ADMIN_NUMBER}@s.whatsapp.net`  // Baileys usa @s.whatsapp.net
+const ADMIN_JID    = process.env.ADMIN_JID || `${ADMIN_NUMBER}@s.whatsapp.net`  // Baileys usa @s.whatsapp.net
 
 const TEAM_MAP = {
   'Mexico': 'México', 'South Africa': 'Sudáfrica',
