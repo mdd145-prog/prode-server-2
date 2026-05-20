@@ -1,4 +1,6 @@
 require('dotenv').config()
+const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js')
+const qrcode = require('qrcode-terminal')
 const express = require('express')
 const cron = require('node-cron')
 const { createClient } = require('@supabase/supabase-js')
@@ -11,123 +13,117 @@ app.use(express.json())
 // ── Clientes ──────────────────────────────────────────────
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY)
 
-// ── Helpers WhatsApp ──────────────────────────────────────
-async function enviarMensaje(to, texto) {
-  await axios.post(
-    `https://graph.facebook.com/v19.0/${process.env.WA_PHONE_ID}/messages`,
-    { messaging_product: 'whatsapp', to, type: 'text', text: { body: texto } },
-    { headers: { Authorization: `Bearer ${process.env.WA_TOKEN}`, 'Content-Type': 'application/json' } }
-  )
+// ── Constantes ────────────────────────────────────────────
+const ADMIN_NUMBER = '5491157671081'
+const ADMIN_JID    = `${ADMIN_NUMBER}@c.us`
+
+const TEAM_MAP = {
+  'Mexico': 'México', 'South Africa': 'Sudáfrica',
+  'Korea Republic': 'Rep. de Corea', 'South Korea': 'Rep. de Corea',
+  'Czechia': 'Rep. Checa', 'Czech Republic': 'Rep. Checa',
+  'Canada': 'Canadá', 'Bosnia and Herzegovina': 'Bosnia Herz.',
+  'Bosnia & Herzegovina': 'Bosnia Herz.', 'Qatar': 'Catar',
+  'Switzerland': 'Suiza', 'Brazil': 'Brasil', 'Morocco': 'Marruecos',
+  'Haiti': 'Haití', 'Scotland': 'Escocia',
+  'United States': 'Estados Unidos', 'USA': 'Estados Unidos',
+  'Paraguay': 'Paraguay', 'Australia': 'Australia', 'Turkey': 'Turquía',
+  'Germany': 'Alemania', 'Curaçao': 'Curazao', 'Curacao': 'Curazao',
+  "Côte d'Ivoire": 'Costa de Marfil', 'Ivory Coast': 'Costa de Marfil',
+  'Ecuador': 'Ecuador', 'Netherlands': 'Países Bajos', 'Japan': 'Japón',
+  'Sweden': 'Suecia', 'Tunisia': 'Túnez', 'Belgium': 'Bélgica',
+  'Egypt': 'Egipto', 'Iran': 'Irán', 'New Zealand': 'Nueva Zelanda',
+  'Spain': 'España', 'Cape Verde': 'Cabo Verde', 'Saudi Arabia': 'Arabia Saudí',
+  'Uruguay': 'Uruguay', 'France': 'Francia', 'Senegal': 'Senegal',
+  'Norway': 'Noruega', 'Iraq': 'Irak', 'Argentina': 'Argentina',
+  'Algeria': 'Argelia', 'Austria': 'Austria', 'Jordan': 'Jordania',
+  'Portugal': 'Portugal', 'Colombia': 'Colombia', 'Uzbekistan': 'Uzbekistán',
+  'DR Congo': 'RD Congo', 'Congo DR': 'RD Congo',
+  'Democratic Republic of Congo': 'RD Congo',
+  'England': 'Inglaterra', 'Croatia': 'Croacia',
+  'Ghana': 'Ghana', 'Panama': 'Panamá',
 }
+const mapTeam = n => TEAM_MAP[n] || n
 
-async function enviarImagen(to, imagenBuffer, caption) {
-  // Subir imagen como form-data
-  const FormData = require('form-data')
-  const form = new FormData()
-  form.append('file', imagenBuffer, { filename: 'tabla.jpg', contentType: 'image/jpeg' })
-  form.append('type', 'image/jpeg')
-  form.append('messaging_product', 'whatsapp')
+// ── WhatsApp Client ───────────────────────────────────────
+const client = new Client({
+  authStrategy: new LocalAuth(),
+  puppeteer: {
+    args: [
+      '--no-sandbox', '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage', '--disable-accelerated-2d-canvas',
+      '--no-first-run', '--no-zygote', '--single-process', '--disable-gpu'
+    ]
+  }
+})
 
-  const uploadRes = await axios.post(
-    `https://graph.facebook.com/v19.0/${process.env.WA_PHONE_ID}/media`,
-    form,
-    { headers: { ...form.getHeaders(), Authorization: `Bearer ${process.env.WA_TOKEN}` } }
-  )
-  const mediaId = uploadRes.data.id
-
-  await axios.post(
-    `https://graph.facebook.com/v19.0/${process.env.WA_PHONE_ID}/messages`,
-    { messaging_product: 'whatsapp', to, type: 'image', image: { id: mediaId, caption } },
-    { headers: { Authorization: `Bearer ${process.env.WA_TOKEN}`, 'Content-Type': 'application/json' } }
-  )
-}
+client.on('qr', qr => {
+  console.log('\n=== ESCANEAR QR DESDE WHATSAPP ===')
+  qrcode.generate(qr, { small: true })
+  console.log('===================================\n')
+})
+client.on('ready',        () => console.log('✅ Bot conectado!'))
+client.on('auth_failure', m  => console.error('❌ Auth error:', m))
+client.on('disconnected', r  => console.log('⚠️  Desconectado:', r))
 
 // ── Lógica de puntos ──────────────────────────────────────
 function calcPts(pred, partido) {
   if (partido.goles1 === null || partido.goles2 === null) return null
   if (!pred || pred.goles1 === null || pred.goles2 === null) return 0
   if (pred.goles1 === partido.goles1 && pred.goles2 === partido.goles2) return 3
-  const tendPred = pred.goles1 > pred.goles2 ? 1 : pred.goles1 < pred.goles2 ? -1 : 0
-  const tendReal = partido.goles1 > partido.goles2 ? 1 : partido.goles1 < partido.goles2 ? -1 : 0
-  return tendPred === tendReal ? 1 : 0
+  const tend = (a, b) => a > b ? 1 : a < b ? -1 : 0
+  return tend(pred.goles1, pred.goles2) === tend(partido.goles1, partido.goles2) ? 1 : 0
 }
 
 async function buildBoard() {
-  const { data: jugadores } = await supabase.from('jugadores').select('*').order('orden')
-  const { data: partidos } = await supabase.from('partidos').select('*')
+  const { data: jugadores }   = await supabase.from('jugadores').select('*').order('orden')
+  const { data: partidos }    = await supabase.from('partidos').select('*')
   const { data: pronosticos } = await supabase.from('pronosticos').select('*')
-
+  if (!jugadores) return []
   return jugadores.map(j => {
     let tot = 0, ex = 0, lv = 0, fail = 0, jug = 0
-    const preds = pronosticos.filter(p => p.jugador_id === j.id)
-    for (const partido of partidos) {
+    const preds = pronosticos?.filter(p => p.jugador_id === j.id) || []
+    for (const partido of (partidos || [])) {
       if (partido.goles1 === null) continue
       const pred = preds.find(p => p.partido_id === partido.id)
-      const pts = calcPts(pred, partido)
+      const pts  = calcPts(pred, partido)
       if (pts === null) continue
       jug++; tot += pts
-      if (pts === 3) ex++
-      else if (pts === 1) lv++
-      else fail++
+      if (pts === 3) ex++; else if (pts === 1) lv++; else fail++
     }
     const pct = jug > 0 ? ((ex / jug) * 100).toFixed(0) + '%' : '-'
-    return { ...j, tot, ex, lv, fail, jug, pct }
+    return { id: j.id, nombre: j.nombre, tot, ex, lv, fail, jug, pct }
   }).sort((a, b) => b.tot - a.tot)
 }
 
-// ── Formatear tabla texto ─────────────────────────────────
-async function tablaTexto(oficial = false) {
+async function tablaTexto() {
   const board = await buildBoard()
   const { data: partidos } = await supabase.from('partidos').select('*')
-  const jugados = partidos.filter(p => p.goles1 !== null).length
-  const total = partidos.length
-
-  // Partido en vivo (si existe)
-  const ahora = new Date()
-  const enVivo = partidos.find(p => {
-    if (!p.en_vivo) return false
-    return true
-  })
-
-  const titulo = oficial ? '🏆 TABLA OFICIAL' : '📊 TABLA'
-  const fecha = ahora.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })
-  const lines = [
-    `⚽ *PRODE MUNDIAL 2026*`,
-    `${titulo} · ${fecha}`,
-    `_${jugados}/${total} partidos jugados_`,
-  ]
-
-  if (enVivo) {
-    lines.push(``, `🔴 *EN VIVO* ${enVivo.equipo1} ${enVivo.goles1 ?? 0}-${enVivo.goles2 ?? 0} ${enVivo.equipo2} (${enVivo.minuto || ''}')`)
-  }
-
-  lines.push(``)
+  const jugados = partidos?.filter(p => p.goles1 !== null).length || 0
+  const total   = partidos?.length || 72
+  const fecha   = new Date().toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })
+  const lines   = [`⚽ *PRODE MUNDIAL 2026*`, `📊 TABLA · ${fecha}`, `_${jugados}/${total} partidos jugados_`, ``]
   board.forEach((p, i) => {
     const pos = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`
-    const ex = p.ex > 0 ? ` ⚡${p.ex}` : ''
-    lines.push(`${pos} *${p.nombre}* — ${p.tot}pts${ex}`)
+    lines.push(`${pos} *${p.nombre}* — ${p.tot}pts${p.ex > 0 ? ` ⚡${p.ex}` : ''}`)
   })
   lines.push(``, `_⚡Exacto=3pts · 📈Levante=1pt_`)
   return lines.join('\n')
 }
 
-// ── Tabla del día texto ───────────────────────────────────
 async function tablaDiaTexto(fecha) {
-  const { data: partidos } = await supabase.from('partidos').select('*').eq('fecha', fecha)
-  if (!partidos || !partidos.length) return `No hay partidos el ${fecha}`
-
-  const { data: jugadores } = await supabase.from('jugadores').select('*').order('orden')
+  const { data: partidos }    = await supabase.from('partidos').select('*').eq('fecha', fecha)
+  if (!partidos?.length) return `No hay partidos el ${fecha}`
+  const { data: jugadores }   = await supabase.from('jugadores').select('*').order('orden')
   const { data: pronosticos } = await supabase.from('pronosticos').select('*')
-
   const lines = [`📅 *PARTIDOS ${fecha}*`, ``]
   for (const p of partidos) {
-    const res = p.goles1 !== null ? `${p.goles1}-${p.goles2}` : p.en_vivo ? `${p.goles1 ?? 0}-${p.goles2 ?? 0} 🔴` : p.hora
+    const res = p.goles1 !== null ? `${p.goles1}-${p.goles2}` : p.hora
     lines.push(`*${p.equipo1} ${res} ${p.equipo2}* (G${p.grupo})`)
-    for (const j of jugadores) {
-      const pred = pronosticos.find(pr => pr.jugador_id === j.id && pr.partido_id === p.id)
+    for (const j of (jugadores || [])) {
+      const pred    = pronosticos?.find(pr => pr.jugador_id === j.id && pr.partido_id === p.id)
       const predTxt = pred && pred.goles1 !== null ? `${pred.goles1}-${pred.goles2}` : '-'
-      const pts = calcPts(pred, p)
-      const icon = pts === 3 ? '✅' : pts === 1 ? '📈' : pts === 0 ? '❌' : '⏳'
+      const pts     = calcPts(pred, p)
+      const icon    = pts === 3 ? '✅' : pts === 1 ? '📈' : pts === 0 ? '❌' : '⏳'
       lines.push(`  ${icon} ${j.nombre}: ${predTxt}`)
     }
     lines.push(``)
@@ -135,190 +131,208 @@ async function tablaDiaTexto(fecha) {
   return lines.join('\n')
 }
 
-// ── Mensaje fin de partido ────────────────────────────────
 async function mensajeFinPartido(partido) {
-  const { data: jugadores } = await supabase.from('jugadores').select('*').order('orden')
+  const { data: jugadores }   = await supabase.from('jugadores').select('*').order('orden')
   const { data: pronosticos } = await supabase.from('pronosticos').select('*').eq('partido_id', partido.id)
-
-  const lines = [
-    `⚽ *FIN: ${partido.equipo1} ${partido.goles1}-${partido.goles2} ${partido.equipo2}*`,
-    ``
-  ]
-  jugadores.forEach(j => {
-    const pred = pronosticos.find(p => p.jugador_id === j.id)
+  const lines = [`⚽ *FIN: ${partido.equipo1} ${partido.goles1}-${partido.goles2} ${partido.equipo2}*`, ``]
+  ;(jugadores || []).forEach(j => {
+    const pred    = pronosticos?.find(p => p.jugador_id === j.id)
     const predTxt = pred && pred.goles1 !== null ? `${pred.goles1}-${pred.goles2}` : '-'
-    const pts = calcPts(pred, partido)
-    const icon = pts === 3 ? '✅ +3' : pts === 1 ? '📈 +1' : '❌ 0'
-    lines.push(`${icon} *${j.nombre}* pronosticó ${predTxt}`)
+    const pts     = calcPts(pred, partido)
+    lines.push(`${pts === 3 ? '✅ +3' : pts === 1 ? '📈 +1' : '❌  0'} *${j.nombre}* pronosticó ${predTxt}`)
   })
   return lines.join('\n')
 }
 
-// ── Webhook Meta ──────────────────────────────────────────
-app.get('/webhook', (req, res) => {
-  if (req.query['hub.verify_token'] === process.env.WA_VERIFY_TOKEN) {
-    res.send(req.query['hub.challenge'])
-  } else {
-    res.sendStatus(403)
+// ── Helpers de envío ──────────────────────────────────────
+async function enviarAlGrupo(texto) {
+  const g = process.env.GROUP_ID
+  if (!g) return console.log('⚠ GROUP_ID no configurado')
+  await client.sendMessage(g, texto)
+}
+
+async function enviarImagenAlGrupo(buffer, caption) {
+  const g = process.env.GROUP_ID
+  if (!g) return console.log('⚠ GROUP_ID no configurado')
+  const media = new MessageMedia('image/jpeg', buffer.toString('base64'))
+  await client.sendMessage(g, media, { caption })
+}
+
+// ── Handler de mensajes ───────────────────────────────────
+client.on('message', async msg => {
+  const groupId     = process.env.GROUP_ID
+  const testingMode = !groupId
+
+  if (msg.isGroupMsg) {
+    console.log(`📨 GRUPO ID: ${msg.from}`)
   }
-})
 
-app.post('/webhook', async (req, res) => {
-  res.sendStatus(200)
+  const isFromGroup    = msg.from === groupId
+  const isPrivateAdmin = !msg.isGroupMsg && msg.from === ADMIN_JID
+  const isGroupAdmin   = msg.isGroupMsg && msg.author === ADMIN_JID
+  const senderIsAdmin  = isPrivateAdmin || isGroupAdmin
+
+  if (!testingMode && !isFromGroup && !isPrivateAdmin) return
+  if (testingMode  && !isPrivateAdmin) return
+
+  const respondTo = msg.from
+  const texto     = msg.body?.trim().toLowerCase() || ''
+  console.log(`🤖 CMD: "${texto}"`)
+
   try {
-    console.log('WEBHOOK RECIBIDO:', JSON.stringify(req.body, null, 2))
-    const entry = req.body.entry?.[0]
-    const changes = entry?.changes?.[0]
-    const msg = changes?.value?.messages?.[0]
-    if (!msg || msg.type !== 'text') {
-      console.log('No hay mensaje de texto')
-      return
-    }
-
-    const from = msg.from
-    const texto = msg.text.body.trim().toLowerCase()
-    const groupId = process.env.GROUP_ID
-    const testingMode = !groupId            // sin GROUP_ID = modo testing 1-a-1
-    const respondTo = testingMode ? from : groupId
-
-    console.log('FROM:', from, 'TEXTO:', texto, 'TESTING:', testingMode, 'RESPONDE A:', respondTo)
-
-    if (!testingMode && from !== groupId) {
-      console.log('Mensaje ignorado - no coincide GROUP_ID')
-      return
-    }
-
     if (texto === '!tabla') {
-      const txt = await tablaTexto(false)
-      await enviarMensaje(respondTo, txt)
+      await client.sendMessage(respondTo, await tablaTexto())
     }
     else if (texto === '!oficial') {
       const board = await buildBoard()
+      if (!board.length) { await client.sendMessage(respondTo, 'No hay datos aún'); return }
       const img = await generarTablaImagen(board, 'oficial')
-      await enviarImagen(respondTo, img, '🏆 TABLA OFICIAL — PRODE MUNDIAL 2026')
+      await client.sendMessage(respondTo, new MessageMedia('image/jpeg', img.toString('base64')), { caption: '🏆 TABLA OFICIAL — PRODE MUNDIAL 2026' })
     }
     else if (texto === '!hoy') {
-      const hoy = new Date().toISOString().slice(0, 10)
-      const txt = await tablaDiaTexto(hoy)
-      await enviarMensaje(respondTo, txt)
+      await client.sendMessage(respondTo, await tablaDiaTexto(new Date().toISOString().slice(0, 10)))
     }
     else if (texto.startsWith('!dia ')) {
-      const fecha = texto.replace('!dia ', '').trim()
-      const txt = await tablaDiaTexto(fecha)
-      await enviarMensaje(respondTo, txt)
+      await client.sendMessage(respondTo, await tablaDiaTexto(texto.replace('!dia ', '').trim()))
     }
     else if (texto === '!ayuda' || texto === 'hola' || texto === 'ping') {
-      await enviarMensaje(respondTo,
+      await client.sendMessage(respondTo,
         `🤖 *Prode Mundial 2026 — Comandos:*\n\n` +
-        `!tabla → Tabla de posiciones\n` +
-        `!oficial → Tabla oficial (imagen)\n` +
-        `!hoy → Partidos de hoy\n` +
-        `!dia YYYY-MM-DD → Partidos de una fecha\n` +
-        `!ayuda → Este mensaje`
-      )
+        `!tabla → Tabla de posiciones\n!oficial → Tabla (imagen)\n` +
+        `!hoy → Partidos de hoy\n!dia YYYY-MM-DD → Partidos de fecha\n!ayuda → Este mensaje`)
     }
-    else {
-      // En testing, contestar algo para confirmar que llega
-      if (testingMode) {
-        await enviarMensaje(respondTo, `Recibí: "${texto}". Probá con !ayuda`)
-      }
+    else if (senderIsAdmin && texto === '!forzar') {
+      if (!groupId) { await client.sendMessage(respondTo, '❌ GROUP_ID no configurado'); return }
+      const board = await buildBoard()
+      const img   = await generarTablaImagen(board, 'oficial')
+      await enviarImagenAlGrupo(img, '🏆 TABLA OFICIAL — PRODE MUNDIAL 2026')
+      if (isPrivateAdmin) await client.sendMessage(respondTo, '✅ Tabla enviada al grupo')
+    }
+    else if (senderIsAdmin && texto === '!sync') {
+      await client.sendMessage(respondTo, '🔄 Sincronizando...')
+      await verificarPartidosEnVivo(true)
+      await client.sendMessage(respondTo, '✅ Sync completado')
+    }
+    else if (senderIsAdmin && texto.startsWith('!resultado ')) {
+      await handleResultadoManual(texto, respondTo)
+    }
+    else if (senderIsAdmin && texto === '!estado') {
+      const { data: p } = await supabase.from('partidos').select('id').not('goles1', 'is', null)
+      const { data: j } = await supabase.from('jugadores').select('id')
+      await client.sendMessage(respondTo,
+        `📊 *Estado:*\nJugadores: ${j?.length || 0}\nPartidos jugados: ${p?.length || 0}/72\n` +
+        `GROUP_ID: ${groupId || '❌ NO CONFIGURADO'}\nAPI fútbol: ${process.env.FOOTBALL_API_KEY ? '✅' : '❌'}`)
+    }
+    else if (testingMode) {
+      await client.sendMessage(respondTo, `Recibí: "${msg.body}". Probá con !ayuda`)
     }
   } catch (e) {
-    console.error('Webhook error:', e.response?.data || e.message)
+    console.error('Error handler:', e.message)
+    try { await client.sendMessage(respondTo, `❌ Error: ${e.message}`) } catch {}
   }
 })
 
-// ── Polling API-Sports ────────────────────────────────────
-const partidosFinalizados = new Set()
+// ── Resultado manual (admin) ──────────────────────────────
+async function handleResultadoManual(texto, respondTo) {
+  const partes = texto.replace('!resultado ', '').trim().split(' ')
+  if (partes.length < 4) {
+    await client.sendMessage(respondTo, '❌ Formato: !resultado Equipo1 goles1 Equipo2 goles2\nEj: !resultado Argentina 2 Francia 1')
+    return
+  }
+  const g2 = parseInt(partes[partes.length - 1])
+  const g1 = parseInt(partes[partes.length - 2])
+  const mid = Math.floor(partes.length / 2)
+  const t1 = partes.slice(0, mid).join(' ')
+  const t2 = partes.slice(mid, partes.length - 2).join(' ')
 
-async function verificarPartidosEnVivo() {
-  if (!process.env.APISPORTS_KEY) return
+  if (isNaN(g1) || isNaN(g2)) { await client.sendMessage(respondTo, '❌ Los goles deben ser números'); return }
+
+  const { data: partidos } = await supabase.from('partidos').select('*')
+  const partido = partidos?.find(p =>
+    (p.equipo1.toLowerCase().includes(t1.toLowerCase()) || t1.toLowerCase().includes(p.equipo1.toLowerCase())) &&
+    (p.equipo2.toLowerCase().includes(t2.toLowerCase()) || t2.toLowerCase().includes(p.equipo2.toLowerCase()))
+  )
+  if (!partido) { await client.sendMessage(respondTo, `❌ No encontré "${t1} vs ${t2}"`); return }
+
+  const { error } = await supabase.from('partidos').update({ goles1: g1, goles2: g2 }).eq('id', partido.id)
+  if (error) { await client.sendMessage(respondTo, `❌ Error: ${error.message}`); return }
+
+  await client.sendMessage(respondTo, `✅ ${partido.equipo1} ${g1}-${g2} ${partido.equipo2}`)
+  const groupId = process.env.GROUP_ID
+  if (groupId) {
+    const msgFin = await mensajeFinPartido({ ...partido, goles1: g1, goles2: g2 })
+    await enviarAlGrupo(msgFin)
+    setTimeout(async () => {
+      try { const board = await buildBoard(); const img = await generarTablaImagen(board, 'oficial'); await enviarImagenAlGrupo(img, '🏆 TABLA ACTUALIZADA') } catch(e) { console.error(e.message) }
+    }, 3000)
+  }
+}
+
+// ── Polling football-data.org ─────────────────────────────
+const finalizados = new Set()
+
+async function verificarPartidosEnVivo(forzar = false) {
+  if (!process.env.FOOTBALL_API_KEY) { if (forzar) console.log('⚠ FOOTBALL_API_KEY no configurada'); return }
   try {
-    const hoy = new Date().toISOString().slice(0, 10)
-    const res = await axios.get('https://v3.football.api-sports.io/fixtures', {
-      params: { date: hoy, league: 1, season: 2026 },
-      headers: { 'x-apisports-key': process.env.APISPORTS_KEY }
+    const hoy         = new Date().toISOString().slice(0, 10)
+    const competition = process.env.FOOTBALL_COMPETITION || 'WC'
+    const res = await axios.get(`https://api.football-data.org/v4/competitions/${competition}/matches`, {
+      params: { dateFrom: hoy, dateTo: hoy },
+      headers: { 'X-Auth-Token': process.env.FOOTBALL_API_KEY },
+      timeout: 10000
     })
+    const matches = res.data?.matches || []
+    if (forzar) console.log(`📡 API: ${matches.length} partidos encontrados`)
 
-    const fixtures = res.data.response || []
-    for (const f of fixtures) {
-      const status = f.fixture.status.short
-      const apiId = f.fixture.id
-      const home = f.teams.home.name
-      const away = f.teams.away.name
-      const g1 = f.goals.home
-      const g2 = f.goals.away
-      const minuto = f.fixture.status.elapsed
+    const { data: dbHoy } = await supabase.from('partidos').select('*').eq('fecha', hoy)
 
-      // Buscar partido en nuestra DB por equipos
-      const { data: partido } = await supabase.from('partidos')
-        .select('*')
-        .ilike('equipo1', `%${home.slice(0,4)}%`)
-        .ilike('equipo2', `%${away.slice(0,4)}%`)
-        .single()
+    for (const f of matches) {
+      const status = f.status
+      const g1     = f.score?.fullTime?.home ?? null
+      const g2     = f.score?.fullTime?.away ?? null
+      const t1     = mapTeam(f.homeTeam?.name || '')
+      const t2     = mapTeam(f.awayTeam?.name || '')
+      const partido = dbHoy?.find(p => (p.equipo1 === t1 && p.equipo2 === t2) || (p.equipo1 === t2 && p.equipo2 === t1))
+      if (!partido) { if (forzar) console.log(`⚠ No encontrado en DB: "${t1}" vs "${t2}"`); continue }
 
-      if (!partido) continue
-
-      // Actualizar goles en tiempo real
-      if (['1H','HT','2H','ET','BT','P'].includes(status)) {
-        await supabase.from('partidos').update({ goles1: g1, goles2: g2, en_vivo: true, minuto }).eq('id', partido.id)
+      // Actualizar goles si cambiaron
+      if (g1 !== null && g2 !== null && (partido.goles1 !== g1 || partido.goles2 !== g2)) {
+        await supabase.from('partidos').update({ goles1: g1, goles2: g2 }).eq('id', partido.id)
+        if (forzar) console.log(`📊 ${partido.equipo1} ${g1}-${g2} ${partido.equipo2}`)
       }
 
-      // Partido finalizado
-      if (status === 'FT' && !partidosFinalizados.has(apiId)) {
-        partidosFinalizados.add(apiId)
-        await supabase.from('partidos').update({ goles1: g1, goles2: g2, en_vivo: false, minuto: null }).eq('id', partido.id)
-
-        // Mandar resultado al grupo (solo si hay GROUP_ID configurado)
-        const partActualizado = { ...partido, goles1: g1, goles2: g2 }
-        const msgFin = await mensajeFinPartido(partActualizado)
-        if (process.env.GROUP_ID) await enviarMensaje(process.env.GROUP_ID, msgFin)
-
-        // Esperar 3 segundos y mandar tabla oficial como imagen
+      // Partido finalizado → avisar al grupo
+      const key = `${hoy}_${partido.id}`
+      if (status === 'FINISHED' && !finalizados.has(key)) {
+        finalizados.add(key)
+        const msgFin = await mensajeFinPartido({ ...partido, goles1: g1, goles2: g2 })
+        await enviarAlGrupo(msgFin)
+        console.log(`🏁 FIN: ${partido.equipo1} ${g1}-${g2} ${partido.equipo2}`)
         setTimeout(async () => {
-          const board = await buildBoard()
-          const img = await generarTablaImagen(board, 'oficial')
-          if (process.env.GROUP_ID) await enviarImagen(process.env.GROUP_ID, img, '🏆 TABLA ACTUALIZADA')
+          try { const board = await buildBoard(); const img = await generarTablaImagen(board, 'oficial'); await enviarImagenAlGrupo(img, '🏆 TABLA ACTUALIZADA') } catch(e) { console.error(e.message) }
         }, 3000)
       }
     }
   } catch (e) {
-    console.error('Polling error:', e.message)
+    if (e.response?.status === 429) console.log('⚠ Rate limit API fútbol')
+    else console.error('Error polling:', e.message)
   }
 }
 
-// Polling adaptativo: cada 2 min durante el día del partido
-cron.schedule('*/2 * * * *', async () => {
-  const hora = new Date().getHours()
-  if (hora >= 12 && hora <= 23) {
-    await verificarPartidosEnVivo()
-  }
+// Polling cada 10 min entre 12 y 23hs (≤66 req/día = dentro del límite gratis)
+cron.schedule('*/10 * * * *', async () => {
+  if (new Date().getHours() >= 12) await verificarPartidosEnVivo()
 })
 
-// ── Cargar fixture inicial en DB ──────────────────────────
-app.post('/admin/cargar-fixture', async (req, res) => {
-  // Este endpoint lo llama la app admin para sincronizar los partidos
-  const { partidos } = req.body
-  if (!partidos) return res.status(400).json({ error: 'Falta partidos' })
-  const { error } = await supabase.from('partidos').upsert(partidos)
-  if (error) return res.status(500).json({ error })
-  res.json({ ok: true, count: partidos.length })
-})
-
-// ── Sincronizar jugadores y pronósticos desde app ─────────
+// ── Endpoints HTTP ────────────────────────────────────────
 app.post('/admin/sync', async (req, res) => {
   const { jugadores, pronosticos } = req.body
   if (jugadores) await supabase.from('jugadores').upsert(jugadores)
   if (pronosticos) {
     for (const [jugadorId, preds] of Object.entries(pronosticos)) {
       for (const [partidoId, pred] of Object.entries(preds)) {
-        if (pred && pred.s1 !== null && pred.s2 !== null) {
-          await supabase.from('pronosticos').upsert({
-            jugador_id: jugadorId,
-            partido_id: partidoId,
-            goles1: pred.s1,
-            goles2: pred.s2
-          })
+        if (pred?.s1 !== null && pred?.s2 !== null) {
+          await supabase.from('pronosticos').upsert({ jugador_id: jugadorId, partido_id: partidoId, goles1: pred.s1, goles2: pred.s2 })
         }
       }
     }
@@ -326,18 +340,10 @@ app.post('/admin/sync', async (req, res) => {
   res.json({ ok: true })
 })
 
-// ── SMS entrante (para capturar código de verificación de Meta) ───────────────
-app.post('/sms', express.urlencoded({ extended: false }), (req, res) => {
-  console.log('=== SMS ENTRANTE ===')
-  console.log('De:', req.body.From)
-  console.log('Para:', req.body.To)
-  console.log('Mensaje:', req.body.Body)
-  console.log('===================')
-  res.sendStatus(200)
-})
-
-// ── Health check ──────────────────────────────────────────
 app.get('/', (req, res) => res.json({ status: 'ok', app: 'Prode Bot 2026' }))
 
+// ── Arrancar ──────────────────────────────────────────────
 const PORT = process.env.PORT || 3000
-app.listen(PORT, () => console.log(`Servidor corriendo en puerto ${PORT}`))
+app.listen(PORT, () => console.log(`HTTP en puerto ${PORT}`))
+client.initialize()
+console.log('🚀 Iniciando bot WhatsApp...')
