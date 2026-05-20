@@ -1,7 +1,8 @@
 require('dotenv').config()
-const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js')
-const qrcode = require('qrcode-terminal')
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, Browsers } = require('@whiskeysockets/baileys')
+const { Boom } = require('@hapi/boom')
 const QRCode = require('qrcode')
+const pino = require('pino')
 const express = require('express')
 const cron = require('node-cron')
 const { createClient } = require('@supabase/supabase-js')
@@ -16,7 +17,7 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY
 
 // ── Constantes ────────────────────────────────────────────
 const ADMIN_NUMBER = '5491157671081'
-const ADMIN_JID    = `${ADMIN_NUMBER}@c.us`
+const ADMIN_JID    = `${ADMIN_NUMBER}@s.whatsapp.net`  // Baileys usa @s.whatsapp.net
 
 const TEAM_MAP = {
   'Mexico': 'México', 'South Africa': 'Sudáfrica',
@@ -45,30 +46,9 @@ const TEAM_MAP = {
 }
 const mapTeam = n => TEAM_MAP[n] || n
 
-// ── QR storage ────────────────────────────────────────────
+// ── Estado global ─────────────────────────────────────────
+let botSock  = null
 let ultimoQR = null
-
-// ── WhatsApp Client ───────────────────────────────────────
-const client = new Client({
-  authStrategy: new LocalAuth(),
-  puppeteer: {
-    args: [
-      '--no-sandbox', '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage', '--disable-accelerated-2d-canvas',
-      '--no-first-run', '--no-zygote', '--single-process', '--disable-gpu'
-    ]
-  }
-})
-
-client.on('qr', qr => {
-  ultimoQR = qr
-  console.log('\n=== QR LISTO — abrí en el navegador: https://prode-server-2.onrender.com/qr ===\n')
-  qrcode.generate(qr, { small: true })
-  console.log('=========================================================================\n')
-})
-client.on('ready',        () => console.log('✅ Bot conectado!'))
-client.on('auth_failure', m  => console.error('❌ Auth error:', m))
-client.on('disconnected', r  => console.log('⚠️  Desconectado:', r))
 
 // ── Lógica de puntos ──────────────────────────────────────
 function calcPts(pred, partido) {
@@ -152,123 +132,140 @@ async function mensajeFinPartido(partido) {
 // ── Helpers de envío ──────────────────────────────────────
 async function enviarAlGrupo(texto) {
   const g = process.env.GROUP_ID
-  if (!g) return console.log('⚠ GROUP_ID no configurado')
-  await client.sendMessage(g, texto)
+  if (!g || !botSock) return console.log('⚠ GROUP_ID o bot no disponible')
+  await botSock.sendMessage(g, { text: texto })
 }
 
 async function enviarImagenAlGrupo(buffer, caption) {
   const g = process.env.GROUP_ID
-  if (!g) return console.log('⚠ GROUP_ID no configurado')
-  const media = new MessageMedia('image/jpeg', buffer.toString('base64'))
-  await client.sendMessage(g, media, { caption })
+  if (!g || !botSock) return console.log('⚠ GROUP_ID o bot no disponible')
+  await botSock.sendMessage(g, { image: buffer, caption, mimetype: 'image/jpeg' })
 }
 
 // ── Handler de mensajes ───────────────────────────────────
-client.on('message', async msg => {
+async function handleMessage(sock, msg) {
   const groupId     = process.env.GROUP_ID
   const testingMode = !groupId
 
-  if (msg.from.endsWith('@g.us')) {
-    console.log(`📨 GRUPO ID: ${msg.from}`)
+  const from    = msg.key.remoteJid
+  const isGroup = from.endsWith('@g.us')
+  const sender  = msg.key.participant || from  // en grupo: JID del que mandó
+
+  if (isGroup) {
+    console.log(`📨 GRUPO ID: ${from}`)
   }
 
-  const isFromGroup    = msg.from === groupId
-  const isPrivateAdmin = !msg.from.endsWith('@g.us') && msg.from === ADMIN_JID
-  const isGroupAdmin   = msg.from.endsWith('@g.us') && msg.author === ADMIN_JID
+  const isFromGroup    = from === groupId
+  const isPrivateAdmin = !isGroup && sender === ADMIN_JID
+  const isGroupAdmin   = isGroup && sender === ADMIN_JID
   const senderIsAdmin  = isPrivateAdmin || isGroupAdmin
 
   if (!testingMode && !isFromGroup && !isPrivateAdmin) return
   if (testingMode  && !isPrivateAdmin) return
 
-  const respondTo = msg.from
-  const texto     = msg.body?.trim().toLowerCase() || ''
+  const texto = (
+    msg.message?.conversation ||
+    msg.message?.extendedTextMessage?.text ||
+    ''
+  ).trim().toLowerCase()
+
+  const respondTo = from
   console.log(`🤖 CMD: "${texto}"`)
+
+  const sendText  = async t => await sock.sendMessage(respondTo, { text: t })
+  const sendImage = async (buf, cap) => await sock.sendMessage(respondTo, { image: buf, caption: cap, mimetype: 'image/jpeg' })
 
   try {
     if (texto === '!tabla') {
-      await client.sendMessage(respondTo, await tablaTexto())
+      await sendText(await tablaTexto())
     }
     else if (texto === '!oficial') {
       const board = await buildBoard()
-      if (!board.length) { await client.sendMessage(respondTo, 'No hay datos aún'); return }
+      if (!board.length) { await sendText('No hay datos aún'); return }
       const img = await generarTablaImagen(board, 'oficial')
-      await client.sendMessage(respondTo, new MessageMedia('image/jpeg', img.toString('base64')), { caption: '🏆 TABLA OFICIAL — PRODE MUNDIAL 2026' })
+      await sendImage(img, '🏆 TABLA OFICIAL — PRODE MUNDIAL 2026')
     }
     else if (texto === '!hoy') {
-      await client.sendMessage(respondTo, await tablaDiaTexto(new Date().toISOString().slice(0, 10)))
+      await sendText(await tablaDiaTexto(new Date().toISOString().slice(0, 10)))
     }
     else if (texto.startsWith('!dia ')) {
-      await client.sendMessage(respondTo, await tablaDiaTexto(texto.replace('!dia ', '').trim()))
+      await sendText(await tablaDiaTexto(texto.replace('!dia ', '').trim()))
     }
     else if (texto === '!ayuda' || texto === 'hola' || texto === 'ping') {
-      await client.sendMessage(respondTo,
+      await sendText(
         `🤖 *Prode Mundial 2026 — Comandos:*\n\n` +
         `!tabla → Tabla de posiciones\n!oficial → Tabla (imagen)\n` +
-        `!hoy → Partidos de hoy\n!dia YYYY-MM-DD → Partidos de fecha\n!ayuda → Este mensaje`)
+        `!hoy → Partidos de hoy\n!dia YYYY-MM-DD → Partidos de fecha\n!ayuda → Este mensaje`
+      )
     }
     else if (senderIsAdmin && texto === '!forzar') {
-      if (!groupId) { await client.sendMessage(respondTo, '❌ GROUP_ID no configurado'); return }
+      if (!groupId) { await sendText('❌ GROUP_ID no configurado'); return }
       const board = await buildBoard()
       const img   = await generarTablaImagen(board, 'oficial')
       await enviarImagenAlGrupo(img, '🏆 TABLA OFICIAL — PRODE MUNDIAL 2026')
-      if (isPrivateAdmin) await client.sendMessage(respondTo, '✅ Tabla enviada al grupo')
+      if (isPrivateAdmin) await sendText('✅ Tabla enviada al grupo')
     }
     else if (senderIsAdmin && texto === '!sync') {
-      await client.sendMessage(respondTo, '🔄 Sincronizando...')
+      await sendText('🔄 Sincronizando...')
       await verificarPartidosEnVivo(true)
-      await client.sendMessage(respondTo, '✅ Sync completado')
+      await sendText('✅ Sync completado')
     }
     else if (senderIsAdmin && texto.startsWith('!resultado ')) {
-      await handleResultadoManual(texto, respondTo)
+      await handleResultadoManual(sock, texto, respondTo)
     }
     else if (senderIsAdmin && texto === '!estado') {
       const { data: p } = await supabase.from('partidos').select('id').not('goles1', 'is', null)
       const { data: j } = await supabase.from('jugadores').select('id')
-      await client.sendMessage(respondTo,
+      await sendText(
         `📊 *Estado:*\nJugadores: ${j?.length || 0}\nPartidos jugados: ${p?.length || 0}/72\n` +
-        `GROUP_ID: ${groupId || '❌ NO CONFIGURADO'}\nAPI fútbol: ${process.env.FOOTBALL_API_KEY ? '✅' : '❌'}`)
+        `GROUP_ID: ${groupId || '❌ NO CONFIGURADO'}\nAPI fútbol: ${process.env.FOOTBALL_API_KEY ? '✅' : '❌'}`
+      )
     }
     else if (testingMode) {
-      await client.sendMessage(respondTo, `Recibí: "${msg.body}". Probá con !ayuda`)
+      await sendText(`Recibí: "${texto.slice(0,50)}". Probá con !ayuda`)
     }
   } catch (e) {
     console.error('Error handler:', e.message)
-    try { await client.sendMessage(respondTo, `❌ Error: ${e.message}`) } catch {}
+    try { await sendText(`❌ Error: ${e.message}`) } catch {}
   }
-})
+}
 
 // ── Resultado manual (admin) ──────────────────────────────
-async function handleResultadoManual(texto, respondTo) {
+async function handleResultadoManual(sock, texto, respondTo) {
+  const sendText = async t => await sock.sendMessage(respondTo, { text: t })
   const partes = texto.replace('!resultado ', '').trim().split(' ')
   if (partes.length < 4) {
-    await client.sendMessage(respondTo, '❌ Formato: !resultado Equipo1 goles1 Equipo2 goles2\nEj: !resultado Argentina 2 Francia 1')
+    await sendText('❌ Formato: !resultado Equipo1 goles1 Equipo2 goles2\nEj: !resultado Argentina 2 Francia 1')
     return
   }
-  const g2 = parseInt(partes[partes.length - 1])
-  const g1 = parseInt(partes[partes.length - 2])
+  const g2  = parseInt(partes[partes.length - 1])
+  const g1  = parseInt(partes[partes.length - 2])
   const mid = Math.floor(partes.length / 2)
-  const t1 = partes.slice(0, mid).join(' ')
-  const t2 = partes.slice(mid, partes.length - 2).join(' ')
-
-  if (isNaN(g1) || isNaN(g2)) { await client.sendMessage(respondTo, '❌ Los goles deben ser números'); return }
+  const t1  = partes.slice(0, mid).join(' ')
+  const t2  = partes.slice(mid, partes.length - 2).join(' ')
+  if (isNaN(g1) || isNaN(g2)) { await sendText('❌ Los goles deben ser números'); return }
 
   const { data: partidos } = await supabase.from('partidos').select('*')
   const partido = partidos?.find(p =>
     (p.equipo1.toLowerCase().includes(t1.toLowerCase()) || t1.toLowerCase().includes(p.equipo1.toLowerCase())) &&
     (p.equipo2.toLowerCase().includes(t2.toLowerCase()) || t2.toLowerCase().includes(p.equipo2.toLowerCase()))
   )
-  if (!partido) { await client.sendMessage(respondTo, `❌ No encontré "${t1} vs ${t2}"`); return }
+  if (!partido) { await sendText(`❌ No encontré "${t1} vs ${t2}"`); return }
 
   const { error } = await supabase.from('partidos').update({ goles1: g1, goles2: g2 }).eq('id', partido.id)
-  if (error) { await client.sendMessage(respondTo, `❌ Error: ${error.message}`); return }
+  if (error) { await sendText(`❌ Error: ${error.message}`); return }
 
-  await client.sendMessage(respondTo, `✅ ${partido.equipo1} ${g1}-${g2} ${partido.equipo2}`)
+  await sendText(`✅ ${partido.equipo1} ${g1}-${g2} ${partido.equipo2}`)
   const groupId = process.env.GROUP_ID
   if (groupId) {
     const msgFin = await mensajeFinPartido({ ...partido, goles1: g1, goles2: g2 })
     await enviarAlGrupo(msgFin)
     setTimeout(async () => {
-      try { const board = await buildBoard(); const img = await generarTablaImagen(board, 'oficial'); await enviarImagenAlGrupo(img, '🏆 TABLA ACTUALIZADA') } catch(e) { console.error(e.message) }
+      try {
+        const board = await buildBoard()
+        const img   = await generarTablaImagen(board, 'oficial')
+        await enviarImagenAlGrupo(img, '🏆 TABLA ACTUALIZADA')
+      } catch(e) { console.error(e.message) }
     }, 3000)
   }
 }
@@ -288,7 +285,6 @@ async function verificarPartidosEnVivo(forzar = false) {
     })
     const matches = res.data?.matches || []
     if (forzar) console.log(`📡 API: ${matches.length} partidos encontrados`)
-
     const { data: dbHoy } = await supabase.from('partidos').select('*').eq('fecha', hoy)
 
     for (const f of matches) {
@@ -298,15 +294,13 @@ async function verificarPartidosEnVivo(forzar = false) {
       const t1     = mapTeam(f.homeTeam?.name || '')
       const t2     = mapTeam(f.awayTeam?.name || '')
       const partido = dbHoy?.find(p => (p.equipo1 === t1 && p.equipo2 === t2) || (p.equipo1 === t2 && p.equipo2 === t1))
-      if (!partido) { if (forzar) console.log(`⚠ No encontrado en DB: "${t1}" vs "${t2}"`); continue }
+      if (!partido) { if (forzar) console.log(`⚠ No encontrado: "${t1}" vs "${t2}"`); continue }
 
-      // Actualizar goles si cambiaron
       if (g1 !== null && g2 !== null && (partido.goles1 !== g1 || partido.goles2 !== g2)) {
         await supabase.from('partidos').update({ goles1: g1, goles2: g2 }).eq('id', partido.id)
         if (forzar) console.log(`📊 ${partido.equipo1} ${g1}-${g2} ${partido.equipo2}`)
       }
 
-      // Partido finalizado → avisar al grupo
       const key = `${hoy}_${partido.id}`
       if (status === 'FINISHED' && !finalizados.has(key)) {
         finalizados.add(key)
@@ -314,22 +308,93 @@ async function verificarPartidosEnVivo(forzar = false) {
         await enviarAlGrupo(msgFin)
         console.log(`🏁 FIN: ${partido.equipo1} ${g1}-${g2} ${partido.equipo2}`)
         setTimeout(async () => {
-          try { const board = await buildBoard(); const img = await generarTablaImagen(board, 'oficial'); await enviarImagenAlGrupo(img, '🏆 TABLA ACTUALIZADA') } catch(e) { console.error(e.message) }
+          try {
+            const board = await buildBoard()
+            const img   = await generarTablaImagen(board, 'oficial')
+            await enviarImagenAlGrupo(img, '🏆 TABLA ACTUALIZADA')
+          } catch(e) { console.error(e.message) }
         }, 3000)
       }
     }
   } catch (e) {
-    if (e.response?.status === 429) console.log('⚠ Rate limit API fútbol')
+    if (e.response?.status === 429) console.log('⚠ Rate limit API')
     else console.error('Error polling:', e.message)
   }
 }
 
-// Polling cada 10 min entre 12 y 23hs (≤66 req/día = dentro del límite gratis)
 cron.schedule('*/10 * * * *', async () => {
   if (new Date().getHours() >= 12) await verificarPartidosEnVivo()
 })
 
+// ── Conexión WhatsApp (Baileys) ────────────────────────────
+async function conectarBot() {
+  const { state, saveCreds } = await useMultiFileAuthState('./auth_baileys')
+
+  const sock = makeWASocket({
+    auth: state,
+    printQRInTerminal: true,
+    logger: pino({ level: 'silent' }),
+    browser: Browsers.ubuntu('Chrome'),
+    connectTimeoutMs: 60000,
+  })
+
+  sock.ev.on('creds.update', saveCreds)
+
+  sock.ev.on('connection.update', ({ connection, lastDisconnect, qr }) => {
+    if (qr) {
+      ultimoQR = qr
+      console.log('\n=== QR disponible en: https://prode-server-2.onrender.com/qr ===\n')
+    }
+    if (connection === 'close') {
+      ultimoQR = null
+      botSock  = null
+      const code = new Boom(lastDisconnect?.error)?.output?.statusCode
+      console.log('Desconectado. Código:', code)
+      if (code !== DisconnectReason.loggedOut) {
+        console.log('Reconectando en 5s...')
+        setTimeout(conectarBot, 5000)
+      } else {
+        console.log('⚠️ Sesión cerrada. Borrá la carpeta auth_baileys y reiniciá.')
+      }
+    } else if (connection === 'open') {
+      ultimoQR = null
+      botSock  = sock
+      console.log('✅ Bot conectado!')
+    }
+  })
+
+  sock.ev.on('messages.upsert', async ({ messages, type }) => {
+    if (type !== 'notify') return
+    for (const msg of messages) {
+      if (!msg.message) continue
+      if (msg.key.fromMe) continue
+      try { await handleMessage(sock, msg) } catch(e) { console.error('msg error:', e.message) }
+    }
+  })
+}
+
 // ── Endpoints HTTP ────────────────────────────────────────
+app.get('/qr', async (req, res) => {
+  if (!ultimoQR) {
+    return res.send(`<html><body style="background:#1a1a2e;color:white;font-family:sans-serif;text-align:center;padding:40px">
+      <h2>⚽ Prode Bot</h2><p>Bot ya conectado o QR no disponible aún.</p>
+      <p>Refrescá en 15 segundos.</p>
+      <script>setTimeout(()=>location.reload(),15000)</script></body></html>`)
+  }
+  try {
+    const imgUrl = await QRCode.toDataURL(ultimoQR, { width: 350 })
+    res.send(`<html><head><title>QR Prode Bot</title></head>
+      <body style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;background:#1a1a2e;color:white;font-family:sans-serif;gap:16px;margin:0">
+        <h2 style="margin:0">⚽ Prode Bot — Vincular WhatsApp</h2>
+        <img src="${imgUrl}" style="border:8px solid white;border-radius:12px"/>
+        <p style="text-align:center;max-width:300px;color:#aaa">iPhone X: WhatsApp → Ajustes → Dispositivos vinculados → Vincular un dispositivo</p>
+        <p style="color:#f0c030;font-size:13px">El QR expira en ~60 segundos</p>
+        <button onclick="location.reload()" style="padding:10px 24px;background:#6a0dad;color:white;border:none;border-radius:8px;cursor:pointer;font-size:14px;font-weight:bold">🔄 Refrescar QR</button>
+        <script>setTimeout(()=>location.reload(),55000)</script>
+      </body></html>`)
+  } catch(e) { res.status(500).send('Error: ' + e.message) }
+})
+
 app.post('/admin/sync', async (req, res) => {
   const { jugadores, pronosticos } = req.body
   if (jugadores) await supabase.from('jugadores').upsert(jugadores)
@@ -345,38 +410,9 @@ app.post('/admin/sync', async (req, res) => {
   res.json({ ok: true })
 })
 
-// ── QR endpoint (para escanear desde el navegador) ───────
-app.get('/qr', async (req, res) => {
-  if (!ultimoQR) {
-    return res.send(`
-      <html><body style="background:#1a1a2e;color:white;font-family:sans-serif;text-align:center;padding:40px">
-        <h2>⚽ Prode Bot</h2>
-        <p>Bot ya conectado, o QR aún no generado.</p>
-        <p>Refrescá en 15 segundos.</p>
-        <script>setTimeout(()=>location.reload(), 15000)</script>
-      </body></html>`)
-  }
-  try {
-    const imgUrl = await QRCode.toDataURL(ultimoQR, { width: 350 })
-    res.send(`
-      <html><head><title>QR Prode Bot</title></head>
-      <body style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;background:#1a1a2e;color:white;font-family:sans-serif;gap:16px;margin:0">
-        <h2 style="margin:0">⚽ Prode Bot — Vincular WhatsApp</h2>
-        <img src="${imgUrl}" style="border:8px solid white;border-radius:12px"/>
-        <p style="text-align:center;max-width:300px;color:#aaa">En el iPhone X: WhatsApp → Ajustes → Dispositivos vinculados → Vincular un dispositivo</p>
-        <p style="color:#f0c030;font-size:13px">El QR expira en ~60 segundos</p>
-        <button onclick="location.reload()" style="padding:10px 24px;background:#6a0dad;color:white;border:none;border-radius:8px;cursor:pointer;font-size:14px;font-weight:bold">🔄 Refrescar QR</button>
-        <script>setTimeout(()=>location.reload(), 55000)</script>
-      </body></html>`)
-  } catch(e) {
-    res.status(500).send('Error generando QR: ' + e.message)
-  }
-})
-
-app.get('/', (req, res) => res.json({ status: 'ok', app: 'Prode Bot 2026' }))
+app.get('/', (req, res) => res.json({ status: 'ok', app: 'Prode Bot 2026 (Baileys)' }))
 
 // ── Arrancar ──────────────────────────────────────────────
 const PORT = process.env.PORT || 3000
 app.listen(PORT, () => console.log(`HTTP en puerto ${PORT}`))
-client.initialize()
-console.log('🚀 Iniciando bot WhatsApp...')
+conectarBot().then(() => console.log('🚀 Iniciando conexión WhatsApp...')).catch(e => console.error('Error init:', e))
