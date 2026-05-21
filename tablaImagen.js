@@ -140,7 +140,7 @@ async function generarTablaOficial(board) {
 async function generarTablaNoOficial(board, jugados = 0) {
   const M  = 28   // margen exterior crema
   const LH = 22   // line height
-  const W  = 500
+  const W  = 400  // más angosta
 
   const totalLines = 3 + 1.5 + 2 + board.length + 1 + 2
   const H = M * 2 + Math.ceil(totalLines) * LH + 10
@@ -149,23 +149,20 @@ async function generarTablaNoOficial(board, jugados = 0) {
   const ctx = canvas.getContext('2d')
   ctx.scale(S, S)
 
-  // Fondo crema
   ctx.fillStyle = '#f5f0e8'
   ctx.fillRect(0, 0, W, H)
-
   ctx.textBaseline = 'alphabetic'
 
-  // Columnas X (alineadas con textAlign right para números)
-  const xNum   = M
-  const xNombre = M + 32
-  const xPts   = W - M - 72
-  const xEx    = W - M - 52
-  const xLv    = W - M - 34
-  const xFail  = W - M - 16
+  // Columnas: nombre corto + aire entre números
+  const xNum    = M
+  const xNombre = M + 28
+  const xPts    = W - M - 68
+  const xEx     = W - M - 46
+  const xLv     = W - M - 26
+  const xFail   = W - M - 6
 
   let y = M + LH
 
-  // Título
   ctx.fillStyle = '#1a1a1a'
   ctx.font = 'bold 13px monospace'
   ctx.textAlign = 'left'
@@ -177,7 +174,6 @@ async function generarTablaNoOficial(board, jugados = 0) {
   ctx.fillText(`TABLA NO OFICIAL . ${fecha}`, xNum, y); y += LH
   ctx.fillText(`${jugados}/72 partidos jugados`, xNum, y); y += LH * 1.5
 
-  // Header columnas
   ctx.font = 'bold 11px monospace'
   ctx.fillStyle = '#1a1a1a'
   ctx.textAlign = 'left'
@@ -191,20 +187,18 @@ async function generarTablaNoOficial(board, jugados = 0) {
   ctx.textAlign = 'left'
   y += 6
 
-  // Separador superior
   ctx.strokeStyle = '#2a2a2a'
   ctx.lineWidth = 1.5
   ctx.beginPath(); ctx.moveTo(M, y); ctx.lineTo(W - M, y); ctx.stroke()
   y += LH
 
-  // Filas — tinta que se va desvaneciando
-  const inkLevels = ['#1a1a1a','#2a2a2a','#2a2a2a','#3a3a3a','#3a3a3a','#3a3a3a','#4a4a4a','#4a4a4a','#4a4a4a','#555555','#666666','#666666','#666666','#777777','#777777','#888888','#888888','#888888','#999999','#999999']
+  const inkLevels = ['#1a1a1a','#2a2a2a','#2a2a2a','#3a3a3a','#3a3a3a','#3a3a3a','#4a4a4a','#4a4a4a','#4a4a4a','#555555','#666666','#666666','#666666','#777777','#777777','#888888','#888888','#888888','#999999','#aaaaaa']
 
   board.forEach((p, i) => {
     const ink = inkLevels[Math.min(i, inkLevels.length - 1)]
     const num = String(i + 1).padStart(2, ' ')
     const nombre = (p.nombre || '').toUpperCase()
-    const displayNombre = nombre.length > 14 ? nombre.slice(0, 14) + '…' : nombre
+    const displayNombre = nombre.length > 12 ? nombre.slice(0, 12) + '…' : nombre
 
     ctx.fillStyle = ink
     ctx.font = '12px monospace'
