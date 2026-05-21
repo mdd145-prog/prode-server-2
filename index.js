@@ -7,7 +7,7 @@ const express = require('express')
 const cron = require('node-cron')
 const { createClient } = require('@supabase/supabase-js')
 const axios = require('axios')
-const { generarTablaImagen, generarImagenDia } = require('./tablaImagen')
+const { generarTablaImagen, generarImagenDia, generarTablaProba } = require('./tablaImagen')
 
 const app = express()
 app.use(express.json())
@@ -199,6 +199,15 @@ async function handleMessage(sock, msg) {
     else if (texto === '!chances') {
       await sendText(await chancesTexto())
     }
+    else if (texto === '!proba') {
+      if (!process.env.ODDS_API_KEY) { await sendText('❌ ODDS_API_KEY no configurada'); return }
+      await sendText('🎲 Calculando probabilidades...')
+      const result = await calcProbaBoard()
+      if (!result) { await sendText('No hay datos suficientes'); return }
+      if (result.oddsCount === 0) { await sendText('⏳ Las odds del Mundial aún no están disponibles. Volvé a intentar más cerca del torneo.'); return }
+      const img = await generarTablaProba(result.results, result.sims)
+      await sendImage(img, `🎲 CHANCES DE GANAR — PRODE MUNDIAL 2026`)
+    }
     else if (texto === '!ayuda' || texto === 'hola' || texto === 'ping') {
       await sendText(
         `🤖 *Prode Mundial 2026 — Comandos:*\n\n` +
@@ -206,6 +215,7 @@ async function handleMessage(sock, msg) {
         `!hoy → Partidos de hoy + pronósticos\n` +
         `!dia YYYY-MM-DD → Partidos de una fecha\n` +
         `!chances → Quién sigue en carrera\n` +
+        `!proba → Chances de ganar (odds)\n` +
         `!ayuda → Este mensaje`
       )
     }
@@ -302,6 +312,125 @@ async function handleResultadoManual(sock, texto, respondTo) {
 
 // ── Polling football-data.org ─────────────────────────────
 const finalizados = new Set()
+// ── Odds API (cache 1 hora) ───────────────────────────────
+let oddsCache = { data: null, ts: 0 }
+
+async function getOdds() {
+  if (!process.env.ODDS_API_KEY) return []
+  const now = Date.now()
+  if (oddsCache.data && now - oddsCache.ts < 3600000) return oddsCache.data
+  try {
+    const res = await axios.get('https://api.the-odds-api.com/v4/sports/soccer_fifa_world_cup/odds/', {
+      params: { apiKey: process.env.ODDS_API_KEY, regions: 'eu', markets: 'h2h', dateFormat: 'iso' },
+      timeout: 10000
+    })
+    oddsCache = { data: res.data || [], ts: now }
+    console.log(`📊 Odds: ${oddsCache.data.length} partidos`)
+    return oddsCache.data
+  } catch(e) { console.error('Error odds:', e.message); return oddsCache.data || [] }
+}
+
+function buildOddsMap(oddsData, partidos) {
+  const map = {}
+  if (!oddsData?.length || !partidos?.length) return map
+  for (const odd of oddsData) {
+    const homeEsp = TEAM_MAP[odd.home_team] || odd.home_team
+    const awayEsp = TEAM_MAP[odd.away_team] || odd.away_team
+    const partido = partidos.find(p =>
+      (p.equipo1 === homeEsp && p.equipo2 === awayEsp) ||
+      (p.equipo1 === awayEsp && p.equipo2 === homeEsp)
+    )
+    if (!partido || partido.goles1 !== null) continue
+    let hO = [], dO = [], aO = []
+    for (const bm of (odd.bookmakers || [])) {
+      const mkt = bm.markets?.find(m => m.key === 'h2h')
+      if (!mkt) continue
+      for (const o of mkt.outcomes) {
+        if (o.name === odd.home_team) hO.push(o.price)
+        else if (o.name === odd.away_team) aO.push(o.price)
+        else if (o.name === 'Draw') dO.push(o.price)
+      }
+    }
+    if (!hO.length || !aO.length || !dO.length) continue
+    const avg = arr => arr.reduce((a, b) => a + b) / arr.length
+    const pH = 1 / avg(hO), pD = 1 / avg(dO), pA = 1 / avg(aO)
+    const tot = pH + pD + pA
+    const flipped = partido.equipo1 === awayEsp
+    map[partido.id] = {
+      pHome: (flipped ? pA : pH) / tot,
+      pDraw: pD / tot,
+      pAway: (flipped ? pH : pA) / tot
+    }
+  }
+  return map
+}
+
+async function calcProbaBoard() {
+  const [board, oddsData] = await Promise.all([buildBoard(), getOdds()])
+  const { data: partidos }    = await supabase.from('partidos').select('*')
+  const { data: jugadores }   = await supabase.from('jugadores').select('*').order('orden')
+  const { data: pronosticos } = await supabase.from('pronosticos').select('*')
+  if (!jugadores?.length) return null
+
+  const oddsMap  = buildOddsMap(oddsData, partidos)
+  const remaining = (partidos || []).filter(p => p.goles1 === null)
+  const oddsCount = Object.keys(oddsMap).length
+
+  // Puntos actuales
+  const currentPts = {}
+  board.forEach(p => { currentPts[p.id] = p.tot })
+
+  // Monte Carlo 5000 simulaciones
+  const N = 5000
+  const winCounts = {}
+  jugadores.forEach(j => { winCounts[j.id] = 0 })
+
+  for (let sim = 0; sim < N; sim++) {
+    const simPts = { ...currentPts }
+    for (const match of remaining) {
+      const o = oddsMap[match.id]
+      if (!o) continue
+      const r = Math.random()
+      const outcome = r < o.pHome ? 'H' : r < o.pHome + o.pDraw ? 'D' : 'A'
+      for (const jug of jugadores) {
+        const pred = pronosticos?.find(pr => pr.jugador_id === jug.id && pr.partido_id === match.id)
+        if (!pred || pred.goles1 === null) continue
+        const predOut = pred.goles1 > pred.goles2 ? 'H' : pred.goles1 < pred.goles2 ? 'A' : 'D'
+        if (predOut === outcome) {
+          simPts[jug.id] = (simPts[jug.id] || 0) + (Math.random() < 0.15 ? 3 : 1)
+        }
+      }
+    }
+    const maxP = Math.max(...jugadores.map(j => simPts[j.id] || 0))
+    const winners = jugadores.filter(j => (simPts[j.id] || 0) === maxP)
+    for (const w of winners) winCounts[w.id] += 1 / winners.length
+  }
+
+  // Puntos esperados
+  const results = jugadores.map(j => {
+    let ePts = currentPts[j.id] || 0
+    for (const match of remaining) {
+      const o = oddsMap[match.id]
+      if (!o) continue
+      const pred = pronosticos?.find(pr => pr.jugador_id === j.id && pr.partido_id === match.id)
+      if (!pred || pred.goles1 === null) continue
+      const predOut = pred.goles1 > pred.goles2 ? 'H' : pred.goles1 < pred.goles2 ? 'A' : 'D'
+      const pOk = predOut === 'H' ? o.pHome : predOut === 'D' ? o.pDraw : o.pAway
+      ePts += pOk * (0.15 * 3 + 0.85 * 1)
+    }
+    return {
+      id: j.id,
+      nombre: j.nombre,
+      winPct: parseFloat(((winCounts[j.id] || 0) / N * 100).toFixed(1)),
+      expectedPts: Math.round(ePts * 10) / 10,
+      currentPts: currentPts[j.id] || 0
+    }
+  }).sort((a, b) => b.winPct - a.winPct)
+
+  return { results, oddsCount, sims: N }
+}
+
+
 
 
 async function chancesTexto() {
@@ -491,6 +620,18 @@ app.post('/admin/sync', async (req, res) => {
     }
   }
   res.json({ ok: true })
+})
+
+app.get('/preview/proba', async (req, res) => {
+  try {
+    if (!process.env.ODDS_API_KEY) return res.send('ODDS_API_KEY no configurada')
+    const result = await calcProbaBoard()
+    if (!result) return res.send('No hay datos')
+    if (result.oddsCount === 0) return res.send('Odds no disponibles aún para el Mundial 2026')
+    const img = await generarTablaProba(result.results, result.sims)
+    res.setHeader('Content-Type', 'image/png')
+    res.send(img)
+  } catch(e) { res.status(500).send('Error: ' + e.message) }
 })
 
 app.get('/', (req, res) => res.json({ status: 'ok', app: 'Prode Bot 2026 (Baileys)' }))
