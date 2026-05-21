@@ -1,6 +1,6 @@
 const { createCanvas } = require('@napi-rs/canvas')
 
-const S = 3 // Scale factor — 3x para alta definición al hacer zoom
+const S = 3 // 3x para alta definición al hacer zoom
 
 const TEAM_ABBR = {
   'México':'MEX','Sudáfrica':'RSA','Rep. de Corea':'KOR','Rep. Checa':'CHE',
@@ -16,97 +16,94 @@ const TEAM_ABBR = {
   'Portugal':'POR','Colombia':'COL','Uzbekistán':'UZB','RD Congo':'COD',
   'Inglaterra':'ING','Croacia':'CRO','Ghana':'GHA','Panamá':'PAN',
 }
-const abbr = n => TEAM_ABBR[n] || n.slice(0,3).toUpperCase()
+const abbr = n => TEAM_ABBR[n] || n.slice(0, 3).toUpperCase()
 
-// ── Tabla OFICIAL ─────────────────────────────────────────
+// ── TABLA OFICIAL ─────────────────────────────────────────
 async function generarTablaOficial(board) {
-  const M = 20       // margen blanco alrededor
-  const W = 500
-  const HEADER_H = 46
-  const COL_H = 26
-  const ROW_H = 36
-  const FOOTER_H = 24
-  const tableW = W - M * 2
-  const tableH = HEADER_H + COL_H + board.length * ROW_H + FOOTER_H
+  const M  = 20  // margen exterior blanco
+  const P  = 12  // padding interior tabla
+  const HEADER_H = 40
+  const COL_H    = 24
+  const ROW_H    = 34
+  const FOOTER_H = 22
+  const tableW   = 460
+  const tableH   = HEADER_H + COL_H + board.length * ROW_H + FOOTER_H
+  const W = tableW + M * 2
   const H = tableH + M * 2
-  const splitX = Math.floor(tableW * 0.65)
 
   const canvas = createCanvas(W * S, H * S)
   const ctx = canvas.getContext('2d')
   ctx.scale(S, S)
 
+  // Fondo blanco total
   ctx.fillStyle = '#ffffff'
   ctx.fillRect(0, 0, W, H)
 
-  // Dibujar tabla con offset M
+  // Tabla con offset M
   ctx.save()
   ctx.translate(M, M)
 
-  // Header
-  ctx.fillStyle = '#6a0dad'
-  ctx.fillRect(0, 0, splitX, HEADER_H)
-  ctx.fillStyle = '#27ae60'
-  ctx.fillRect(splitX, 0, tableW - splitX, HEADER_H)
+  // Header oscuro
+  ctx.fillStyle = '#3d0070'
+  ctx.fillRect(0, 0, tableW, HEADER_H)
   ctx.fillStyle = '#ffffff'
-  ctx.font = 'bold 16px Arial'
-  ctx.textAlign = 'left'
-  ctx.textBaseline = 'middle'
-  ctx.fillText('TABLA OFICIAL', 14, HEADER_H / 2)
-  ctx.font = 'bold 10px Arial'
+  ctx.font = 'bold 14px Arial'
   ctx.textAlign = 'center'
-  ctx.fillText('RESULTADOS', splitX + (tableW - splitX) / 2, HEADER_H / 2)
+  ctx.textBaseline = 'middle'
+  ctx.fillText('TABLA OFICIAL', tableW / 2, HEADER_H / 2)
 
-  // Columnas
+  // Cols config
   const cols = [
-    { x: 0,   w: 32,  label: 'POS', bg: '#222222', align: 'center' },
-    { x: 32,  w: 158, label: 'JUGADOR', bg: '#222222', align: 'left' },
-    { x: 190, w: 44,  label: 'PTS', bg: '#222222', align: 'center' },
-    { x: 234, w: 36,  label: 'JUG', bg: '#222222', align: 'center' },
-    { x: 270, w: 40,  label: '3',   bg: '#27ae60', align: 'center' },
-    { x: 310, w: 40,  label: '1',   bg: '#27ae60', align: 'center' },
-    { x: 350, w: 40,  label: '0',   bg: '#27ae60', align: 'center' },
-    { x: 390, w: tableW - 390, label: '%',   bg: '#1a6b8a', align: 'center' },
+    { x: 0,   w: 28,  label: 'POS', bg: '#7c3aed', align: 'center' },
+    { x: 28,  w: 150, label: 'JUGADOR', bg: '#7c3aed', align: 'left' },
+    { x: 178, w: 42,  label: 'PTS', bg: '#7c3aed', align: 'center' },
+    { x: 220, w: 34,  label: 'JUG', bg: '#7c3aed', align: 'center' },
+    { x: 254, w: 38,  label: '3',   bg: '#27ae60', align: 'center' },
+    { x: 292, w: 38,  label: '1',   bg: '#27ae60', align: 'center' },
+    { x: 330, w: 38,  label: '0',   bg: '#27ae60', align: 'center' },
+    { x: 368, w: tableW - 368, label: '%', bg: '#1a6b8a', align: 'center' },
   ]
 
-  ctx.textBaseline = 'middle'
+  // Headers columnas
   cols.forEach(col => {
     ctx.fillStyle = col.bg
     ctx.fillRect(col.x, HEADER_H, col.w, COL_H)
     ctx.fillStyle = '#ffffff'
-    ctx.font = 'bold 9px Arial'
+    ctx.font = 'bold 8px Arial'
     ctx.textAlign = col.align === 'left' ? 'left' : 'center'
+    ctx.textBaseline = 'middle'
     ctx.fillText(col.label, col.align === 'left' ? col.x + 6 : col.x + col.w / 2, HEADER_H + COL_H / 2)
   })
 
   // Filas
   board.forEach((p, i) => {
-    const y = HEADER_H + COL_H + i * ROW_H
-    ctx.fillStyle = i % 2 === 0 ? '#d9d9d9' : '#ffffff'
+    const y  = HEADER_H + COL_H + i * ROW_H
+    const bg = i % 2 === 0 ? '#ebebeb' : '#ffffff'
+    ctx.fillStyle = bg
     ctx.fillRect(0, y, tableW, ROW_H)
     const cy = y + ROW_H / 2
-    const nombre = (p.nombre || '').toUpperCase()
-    const displayNombre = nombre.length > 14 ? nombre.slice(0, 14) + '…' : nombre
-
     ctx.textBaseline = 'middle'
 
     ctx.fillStyle = '#1a1a1a'
-    ctx.font = 'bold 11px Arial'
+    ctx.font = 'bold 10px Arial'
     ctx.textAlign = 'center'
     ctx.fillText(`${i + 1}`, cols[0].x + cols[0].w / 2, cy)
 
+    const nombre = (p.nombre || '').toUpperCase()
+    const displayNombre = nombre.length > 14 ? nombre.slice(0, 14) + '…' : nombre
     ctx.textAlign = 'left'
     ctx.fillText(displayNombre, cols[1].x + 6, cy)
 
-    ctx.font = 'bold 15px Arial'
+    ctx.font = 'bold 14px Arial'
     ctx.textAlign = 'center'
     ctx.fillText(`${p.tot}`, cols[2].x + cols[2].w / 2, cy)
 
-    ctx.fillStyle = '#666666'
-    ctx.font = '10px Arial'
+    ctx.fillStyle = '#888888'
+    ctx.font = '9px Arial'
     ctx.fillText(`${p.jug}`, cols[3].x + cols[3].w / 2, cy)
 
     ctx.fillStyle = '#1a6b2e'
-    ctx.font = 'bold 11px Arial'
+    ctx.font = 'bold 10px Arial'
     ctx.fillText(`${p.ex}`, cols[4].x + cols[4].w / 2, cy)
 
     ctx.fillStyle = '#b7770d'
@@ -116,8 +113,8 @@ async function generarTablaOficial(board) {
     ctx.fillText(`${p.fail}`, cols[6].x + cols[6].w / 2, cy)
 
     const pct = p.jug > 0 ? ((p.ex / p.jug) * 100).toFixed(2) + ' %' : '-'
-    ctx.fillStyle = '#444444'
-    ctx.font = '10px Arial'
+    ctx.fillStyle = '#555555'
+    ctx.font = '9px Arial'
     ctx.fillText(pct, cols[7].x + cols[7].w / 2, cy)
   })
 
@@ -125,15 +122,12 @@ async function generarTablaOficial(board) {
   const footerY = HEADER_H + COL_H + board.length * ROW_H
   ctx.fillStyle = '#f5f5f5'
   ctx.fillRect(0, footerY, tableW, FOOTER_H)
-  ctx.strokeStyle = '#dddddd'
-  ctx.lineWidth = 0.5
-  ctx.beginPath(); ctx.moveTo(0, footerY); ctx.lineTo(tableW, footerY); ctx.stroke()
   const fecha = new Date().toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
-  ctx.fillStyle = '#888888'
-  ctx.font = '9px Arial'
+  ctx.fillStyle = '#aaaaaa'
+  ctx.font = '8px Arial'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  ctx.fillText(`PRODE MUNDIAL 2026  |  ${fecha}  |  Exacto=3pts  Levante=1pt`, tableW / 2, footerY + FOOTER_H / 2)
+  ctx.fillText(`PRODE MUNDIAL 2026  ·  ${fecha}  ·  exacto=3pts  levante=1pt`, tableW / 2, footerY + FOOTER_H / 2)
 
   ctx.restore()
 
@@ -142,102 +136,125 @@ async function generarTablaOficial(board) {
   return buf
 }
 
-// ── Tabla NO OFICIAL ──────────────────────────────────────
+// ── TABLA NO OFICIAL (maquina de escribir) ────────────────
 async function generarTablaNoOficial(board, jugados = 0) {
-  const P = 24       // padding
-  const LH = 22      // line height
-  const W = 500
+  const M  = 28   // margen exterior crema
+  const LH = 22   // line height
+  const W  = 500
 
-  const totalLines = 3 + 1 + 2 + board.length + 1 + 2
-  const H = P * 2 + totalLines * LH + 10
+  const totalLines = 3 + 1.5 + 2 + board.length + 1 + 2
+  const H = M * 2 + Math.ceil(totalLines) * LH + 10
 
   const canvas = createCanvas(W * S, H * S)
   const ctx = canvas.getContext('2d')
   ctx.scale(S, S)
 
-  ctx.fillStyle = '#ffffff'
+  // Fondo crema
+  ctx.fillStyle = '#f5f0e8'
   ctx.fillRect(0, 0, W, H)
 
-  const C = { num: P, name: P + 32, pts: 290, ex: 330, lv: 365, fail: 400 }
-  let y = P + LH
-
-  ctx.fillStyle = '#1a1a1a'
   ctx.textBaseline = 'alphabetic'
 
-  ctx.font = 'bold 13px Arial'
-  ctx.textAlign = 'left'
-  ctx.fillText('⚽ PRODE MUNDIAL 2026', P, y); y += LH
+  // Columnas X (alineadas con textAlign right para números)
+  const xNum   = M
+  const xNombre = M + 32
+  const xPts   = W - M - 72
+  const xEx    = W - M - 52
+  const xLv    = W - M - 34
+  const xFail  = W - M - 16
 
-  ctx.font = '12px Arial'
+  let y = M + LH
+
+  // Título
+  ctx.fillStyle = '#1a1a1a'
+  ctx.font = 'bold 13px monospace'
+  ctx.textAlign = 'left'
+  ctx.fillText('PRODE MUNDIAL 2026', xNum, y); y += LH
+
+  ctx.font = '12px monospace'
+  ctx.fillStyle = '#2a2a2a'
   const fecha = new Date().toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })
-  ctx.fillText(`TABLA NO OFICIAL · ${fecha}`, P, y); y += LH
-  ctx.fillText(`${jugados}/72 partidos jugados`, P, y); y += LH * 1.4
+  ctx.fillText(`TABLA NO OFICIAL . ${fecha}`, xNum, y); y += LH
+  ctx.fillText(`${jugados}/72 partidos jugados`, xNum, y); y += LH * 1.5
 
   // Header columnas
-  ctx.font = 'bold 11px Arial'
+  ctx.font = 'bold 11px monospace'
+  ctx.fillStyle = '#1a1a1a'
   ctx.textAlign = 'left'
-  ctx.fillText('#', C.num, y)
-  ctx.fillText('JUGADOR', C.name, y)
+  ctx.fillText('#', xNum, y)
+  ctx.fillText('JUGADOR', xNombre, y)
   ctx.textAlign = 'right'
-  ctx.fillText('PTS', C.pts, y)
-  ctx.fillText('3', C.ex, y)
-  ctx.fillText('1', C.lv, y)
-  ctx.fillText('0', C.fail, y)
+  ctx.fillText('PTS', xPts, y)
+  ctx.fillText('3', xEx, y)
+  ctx.fillText('1', xLv, y)
+  ctx.fillText('0', xFail, y)
   ctx.textAlign = 'left'
-  y += 8
+  y += 6
 
-  // Separador
-  ctx.strokeStyle = '#333333'
-  ctx.lineWidth = 1
-  ctx.beginPath(); ctx.moveTo(P, y); ctx.lineTo(W - P, y); ctx.stroke()
+  // Separador superior
+  ctx.strokeStyle = '#2a2a2a'
+  ctx.lineWidth = 1.5
+  ctx.beginPath(); ctx.moveTo(M, y); ctx.lineTo(W - M, y); ctx.stroke()
   y += LH
 
-  // Filas
-  ctx.font = '12px Arial'
+  // Filas — tinta que se va desvaneciando
+  const inkLevels = ['#1a1a1a','#2a2a2a','#2a2a2a','#3a3a3a','#3a3a3a','#3a3a3a','#4a4a4a','#4a4a4a','#4a4a4a','#555555','#666666','#666666','#666666','#777777','#777777','#888888','#888888','#888888','#999999','#999999']
+
   board.forEach((p, i) => {
-    const num = String(i + 1).padStart(2, '0')
+    const ink = inkLevels[Math.min(i, inkLevels.length - 1)]
+    const num = String(i + 1).padStart(2, ' ')
     const nombre = (p.nombre || '').toUpperCase()
     const displayNombre = nombre.length > 14 ? nombre.slice(0, 14) + '…' : nombre
 
-    ctx.fillStyle = '#1a1a1a'
+    ctx.fillStyle = ink
+    ctx.font = '12px monospace'
     ctx.textAlign = 'left'
-    ctx.fillText(num, C.num, y)
-    ctx.fillText(displayNombre, C.name, y)
+    ctx.fillText(num, xNum, y)
+    ctx.fillText(displayNombre, xNombre, y)
+    ctx.font = 'bold 12px monospace'
     ctx.textAlign = 'right'
-    ctx.fillText(`${p.tot}`, C.pts, y)
-    ctx.fillText(`${p.ex}`, C.ex, y)
-    ctx.fillText(`${p.lv}`, C.lv, y)
-    ctx.fillText(`${p.fail}`, C.fail, y)
+    ctx.fillText(`${p.tot}`, xPts, y)
+    ctx.font = '12px monospace'
+    ctx.fillText(`${p.ex}`, xEx, y)
+    ctx.fillText(`${p.lv}`, xLv, y)
+    ctx.fillText(`${p.fail}`, xFail, y)
     ctx.textAlign = 'left'
     y += LH
   })
 
   y += 4
-  ctx.strokeStyle = '#333333'
-  ctx.lineWidth = 1
-  ctx.beginPath(); ctx.moveTo(P, y); ctx.lineTo(W - P, y); ctx.stroke()
+  ctx.strokeStyle = '#2a2a2a'
+  ctx.lineWidth = 1.5
+  ctx.beginPath(); ctx.moveTo(M, y); ctx.lineTo(W - M, y); ctx.stroke()
   y += LH
 
-  ctx.font = '11px Arial'
-  ctx.fillStyle = '#1a1a1a'
-  ctx.fillText('⚡ exacto=3pts   levante=1pt', P, y); y += LH * 0.9
-  ctx.fillText('⚠ tabla no oficial', P, y)
+  ctx.fillStyle = '#3a3a3a'
+  ctx.font = '11px monospace'
+  ctx.fillText('* exacto=3pts   levante=1pt', M, y); y += LH * 0.9
+  ctx.fillText('* tabla no oficial', M, y)
 
   const buf = await canvas.encode('png')
   console.log(`📊 tablaNoOficial: ${board.length} jugadores, ${buf.length} bytes`)
   return buf
 }
 
-// ── Imagen del Día ────────────────────────────────────────
+// ── IMAGEN DEL DÍA ────────────────────────────────────────
 async function generarImagenDia(partidos, jugadores, pronosticos, fecha) {
-  const P = 24
-  const LH = 22
-  const nameW = 135
-  const nM = partidos.length
-  const matchW = nM <= 4 ? 60 : nM <= 6 ? 50 : 44
-  const W = Math.max(480, P * 2 + nameW + nM * matchW)
-  const totalLines = 2 + 1.4 + 2.6 + 2 + jugadores.length + 1 + 1
-  const H = P * 2 + Math.ceil(totalLines) * LH + 20
+  const M      = 16   // margen exterior blanco
+  const P      = 14   // padding interior
+  const nM     = partidos.length
+  const nameW  = 90
+  const matchW = nM <= 4 ? 58 : nM <= 6 ? 50 : 44
+  const HEADER_H = 36
+  const DATE_H   = 46
+  const COUNTRY_H= 32
+  const RES_H    = 28
+  const ROW_H    = 26
+
+  const tableW = nameW + nM * matchW + P * 2
+  const W = tableW + M * 2
+  const tableH = HEADER_H + DATE_H + COUNTRY_H + RES_H + jugadores.length * ROW_H + P
+  const H = tableH + M * 2
 
   const canvas = createCanvas(W * S, H * S)
   const ctx = canvas.getContext('2d')
@@ -246,87 +263,92 @@ async function generarImagenDia(partidos, jugadores, pronosticos, fecha) {
   ctx.fillStyle = '#ffffff'
   ctx.fillRect(0, 0, W, H)
 
-  ctx.textBaseline = 'alphabetic'
-  ctx.fillStyle = '#1a1a1a'
+  ctx.save()
+  ctx.translate(M, M)
 
-  let y = P + LH
-
-  ctx.font = 'bold 13px Arial'
-  ctx.textAlign = 'left'
-  ctx.fillText('⚽ PRODE MUNDIAL 2026', P, y); y += LH
-
-  const fmtFecha = fecha ? new Date(fecha + 'T12:00:00').toLocaleDateString('es-AR', { day: 'numeric', month: 'long' }) : ''
-  ctx.font = '12px Arial'
-  ctx.fillText(`RESULTADOS · ${fmtFecha.toUpperCase()}`, P, y); y += LH * 1.4
-
-  // Headers equipos (dos líneas)
-  ctx.font = 'bold 10px Arial'
-  partidos.forEach((p, j) => {
-    const cx = P + nameW + j * matchW + matchW / 2
-    ctx.textAlign = 'center'
-    ctx.fillText(abbr(p.equipo1), cx, y)
-  })
-  y += LH * 0.8
-
-  partidos.forEach((p, j) => {
-    const cx = P + nameW + j * matchW + matchW / 2
-    ctx.textAlign = 'center'
-    ctx.fillText(abbr(p.equipo2), cx, y)
-  })
-  y += LH * 0.6
-
-  // Separador
-  ctx.strokeStyle = '#333333'
-  ctx.lineWidth = 1
-  ctx.beginPath(); ctx.moveTo(P, y); ctx.lineTo(W - P, y); ctx.stroke()
-  y += LH
-
-  // Fila RESULTADO
+  // Header RESULTADOS (violeta oscuro)
+  ctx.fillStyle = '#3d0070'
+  ctx.fillRect(0, 0, tableW, HEADER_H)
+  ctx.fillStyle = '#ffffff'
   ctx.font = 'bold 12px Arial'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText('RESULTADOS', tableW / 2, HEADER_H / 2)
+
+  // Fila fecha (violeta muy claro) + headers países (violeta medio)
+  const fmtFecha = fecha ? new Date(fecha + 'T12:00:00').toLocaleDateString('es-AR', { day: 'numeric', month: 'short' }).toUpperCase() : ''
+
+  // Celda fecha
+  ctx.fillStyle = '#f0e8ff'
+  ctx.fillRect(0, HEADER_H, P + nameW, DATE_H + COUNTRY_H)
+  ctx.fillStyle = '#3d0070'
+  ctx.font = 'bold 16px Arial'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(fmtFecha, P + nameW / 2, HEADER_H + (DATE_H + COUNTRY_H) / 2)
+
+  // Headers países (violeta medio)
+  partidos.forEach((p, j) => {
+    const cx = P + nameW + j * matchW + matchW / 2
+    // Top half: equipo1
+    ctx.fillStyle = '#7c3aed'
+    ctx.fillRect(P + nameW + j * matchW, HEADER_H, matchW, DATE_H)
+    // Bottom half: equipo2
+    ctx.fillStyle = '#6d28d9'
+    ctx.fillRect(P + nameW + j * matchW, HEADER_H + DATE_H, matchW, COUNTRY_H)
+
+    ctx.fillStyle = '#ffffff'
+    ctx.font = 'bold 9px Arial'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(abbr(p.equipo1), cx, HEADER_H + DATE_H / 2)
+    ctx.fillText(abbr(p.equipo2), cx, HEADER_H + DATE_H + COUNTRY_H / 2)
+  })
+
+  // Fila RESULTADO (violeta claro)
+  const resY = HEADER_H + DATE_H + COUNTRY_H
+  ctx.fillStyle = '#ddd0f5'
+  ctx.fillRect(0, resY, tableW, RES_H)
+  ctx.fillStyle = '#3d0070'
+  ctx.font = 'bold 9px Arial'
   ctx.textAlign = 'left'
-  ctx.fillText('RESULTADO', P, y)
+  ctx.textBaseline = 'middle'
+  ctx.fillText('RESULTADO', P + 4, resY + RES_H / 2)
   partidos.forEach((p, j) => {
     const cx = P + nameW + j * matchW + matchW / 2
     ctx.textAlign = 'center'
-    ctx.fillText(p.goles1 !== null ? `${p.goles1}-${p.goles2}` : '-', cx, y)
+    ctx.font = 'bold 11px Arial'
+    ctx.fillText(p.goles1 !== null ? `${p.goles1}-${p.goles2}` : '-', cx, resY + RES_H / 2)
   })
-
-  y += 6
-  ctx.strokeStyle = '#333333'
-  ctx.lineWidth = 0.5
-  ctx.beginPath(); ctx.moveTo(P, y); ctx.lineTo(W - P, y); ctx.stroke()
-  y += LH
 
   // Filas jugadores
-  ctx.font = '11px Arial'
   jugadores.forEach((jug, ji) => {
-    const num = String(ji + 1).padStart(2, '0')
+    const y  = resY + RES_H + ji * ROW_H
+    const bg = ji % 2 === 0 ? '#ebebeb' : '#ffffff'
+    ctx.fillStyle = bg
+    ctx.fillRect(0, y, tableW, ROW_H)
+    const cy = y + ROW_H / 2
+
+    const num = String(ji + 1).padStart(2, ' ')
     const nombre = (jug.nombre || '').toUpperCase()
-    const displayNombre = nombre.length > 12 ? nombre.slice(0, 12) + '…' : nombre
+    const displayNombre = nombre.length > 9 ? nombre.slice(0, 9) + '…' : nombre
 
     ctx.fillStyle = '#1a1a1a'
+    ctx.font = '10px Arial'
     ctx.textAlign = 'left'
-    ctx.fillText(`${num} ${displayNombre}`, P, y)
+    ctx.textBaseline = 'middle'
+    ctx.fillText(`${num} ${displayNombre}`, P + 4, cy)
 
     partidos.forEach((p, pi) => {
       const pred = pronosticos?.find(pr => pr.jugador_id === jug.id && pr.partido_id === p.id)
-      const txt = pred && pred.goles1 !== null ? `${pred.goles1}-${pred.goles2}` : '-'
+      const txt  = pred && pred.goles1 !== null ? `${pred.goles1}-${pred.goles2}` : '-'
       ctx.textAlign = 'center'
-      ctx.fillText(txt, P + nameW + pi * matchW + matchW / 2, y)
+      ctx.font = '10px Arial'
+      ctx.fillText(txt, P + nameW + pi * matchW + matchW / 2, cy)
     })
-
-    y += LH
   })
 
-  y += 4
-  ctx.strokeStyle = '#333333'
-  ctx.lineWidth = 1
-  ctx.beginPath(); ctx.moveTo(P, y); ctx.lineTo(W - P, y); ctx.stroke()
-  y += LH
-
-  ctx.font = '11px Arial'
-  ctx.textAlign = 'left'
-  ctx.fillText('⚠ pronosticos · no incluye pts', P, y)
+  ctx.restore()
 
   const buf = await canvas.encode('png')
   console.log(`📊 imagenDia: ${partidos.length} partidos, ${jugadores.length} jugadores, ${buf.length} bytes`)
