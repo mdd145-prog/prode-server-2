@@ -151,10 +151,6 @@ async function handleMessage(sock, msg) {
   const isGroup = from.endsWith('@g.us')
   const sender  = msg.key.participant || from  // en grupo: JID del que mandó
 
-  if (isGroup) {
-    console.log(`📨 GRUPO ID: ${from}`)
-  }
-
   const isFromGroup    = from === groupId
   const isPrivateAdmin = !isGroup && sender === ADMIN_JID
   const isGroupAdmin   = isGroup && sender === ADMIN_JID
@@ -170,7 +166,7 @@ async function handleMessage(sock, msg) {
   ).trim().toLowerCase()
 
   const respondTo = from
-  console.log(`🤖 CMD: "${texto}" | sender: ${sender} | admin: ${ADMIN_JID} | isAdmin: ${senderIsAdmin}`)
+  console.log(`🤖 CMD: "${texto}"${senderIsAdmin ? " [admin]" : ""}`)
 
   const sendText  = async t => await sock.sendMessage(respondTo, { text: t })
   const sendImage = async (buf, cap) => await sock.sendMessage(respondTo, { image: buf, caption: cap, mimetype: 'image/png' })
@@ -194,7 +190,13 @@ async function handleMessage(sock, msg) {
       await sendImage(img, `📅 PARTIDOS ${hoy} — PRODE MUNDIAL 2026`)
     }
     else if (texto.startsWith('!dia ')) {
-      await sendText(await tablaDiaTexto(texto.replace('!dia ', '').trim()))
+      const fecha = texto.replace('!dia ', '').trim()
+      const { data: pFecha } = await supabase.from('partidos').select('*').eq('fecha', fecha)
+      if (!pFecha?.length) { await sendText(`No hay partidos el ${fecha}`); return }
+      const { data: jugs }  = await supabase.from('jugadores').select('*').order('orden')
+      const { data: preds } = await supabase.from('pronosticos').select('*')
+      const img = await generarImagenDia(pFecha, jugs || [], preds || [], fecha)
+      await sendImage(img, `📅 PARTIDOS ${fecha} — PRODE MUNDIAL 2026`)
     }
     else if (texto === '!chances') {
       await sendText(await chancesTexto())
@@ -282,12 +284,16 @@ async function handleResultadoManual(sock, texto, respondTo) {
     await sendText('❌ Formato: !resultado Equipo1 goles1 Equipo2 goles2\nEj: !resultado Argentina 2 Francia 1')
     return
   }
-  const g2  = parseInt(partes[partes.length - 1])
-  const g1  = parseInt(partes[partes.length - 2])
-  const mid = Math.floor(partes.length / 2)
-  const t1  = partes.slice(0, mid).join(' ')
-  const t2  = partes.slice(mid, partes.length - 2).join(' ')
-  if (isNaN(g1) || isNaN(g2)) { await sendText('❌ Los goles deben ser números'); return }
+  // Buscar los dos últimos números para g1 y g2 (soporta equipos multi-palabra)
+  const numIdx = partes.reduce((acc, p, i) => (!isNaN(parseInt(p)) ? [...acc, i] : acc), [])
+  if (numIdx.length < 2) { await sendText('❌ No encontré dos números de goles'); return }
+  const g1Idx = numIdx[numIdx.length - 2]
+  const g2Idx = numIdx[numIdx.length - 1]
+  const g1 = parseInt(partes[g1Idx])
+  const g2 = parseInt(partes[g2Idx])
+  const t1 = partes.slice(0, g1Idx).join(' ')
+  const t2 = partes.slice(g1Idx + 1, g2Idx).join(' ')
+  if (!t1 || !t2) { await sendText('❌ Formato: !resultado Equipo1 goles1 Equipo2 goles2\nEj: !resultado Argentina 2 Francia 1'); return }
 
   const { data: partidos } = await supabase.from('partidos').select('*')
   const partido = partidos?.find(p =>
