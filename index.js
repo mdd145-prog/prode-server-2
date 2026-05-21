@@ -7,7 +7,7 @@ const express = require('express')
 const cron = require('node-cron')
 const { createClient } = require('@supabase/supabase-js')
 const axios = require('axios')
-const { generarTablaImagen } = require('./tablaImagen')
+const { generarTablaImagen, generarImagenDia } = require('./tablaImagen')
 
 const app = express()
 app.use(express.json())
@@ -177,11 +177,21 @@ async function handleMessage(sock, msg) {
 
   try {
     if (texto === '!tabla') {
-      const txt = await tablaTexto()
-      await sendText(txt + '\n\n⚠️ _Esta tabla es NO OFICIAL. Se actualiza cada 2 min durante los partidos._')
+      const board = await buildBoard()
+      if (!board.length) { await sendText('No hay datos aún'); return }
+      const { data: pAll } = await supabase.from('partidos').select('id,goles1')
+      const jugados = pAll?.filter(p => p.goles1 !== null).length || 0
+      const img = await generarTablaImagen(board, 'nooficial', { jugados })
+      await sendImage(img, '📊 TABLA NO OFICIAL — PRODE MUNDIAL 2026')
     }
     else if (texto === '!hoy') {
-      await sendText(await tablaDiaTexto(new Date().toISOString().slice(0, 10)))
+      const hoy = new Date().toISOString().slice(0, 10)
+      const { data: pHoy }  = await supabase.from('partidos').select('*').eq('fecha', hoy)
+      if (!pHoy?.length) { await sendText(`No hay partidos hoy (${hoy})`); return }
+      const { data: jugs }  = await supabase.from('jugadores').select('*').order('orden')
+      const { data: preds } = await supabase.from('pronosticos').select('*')
+      const img = await generarImagenDia(pHoy, jugs || [], preds || [], hoy)
+      await sendImage(img, `📅 PARTIDOS ${hoy} — PRODE MUNDIAL 2026`)
     }
     else if (texto.startsWith('!dia ')) {
       await sendText(await tablaDiaTexto(texto.replace('!dia ', '').trim()))
@@ -210,8 +220,12 @@ async function handleMessage(sock, msg) {
     else if (senderIsAdmin && texto === '!resumen') {
       if (!groupId) { await sendText('❌ GROUP_ID no configurado'); return }
       const hoy = new Date().toISOString().slice(0, 10)
-      const txt = await tablaDiaTexto(hoy)
-      await enviarAlGrupo(txt)
+      const { data: pHoy }  = await supabase.from('partidos').select('*').eq('fecha', hoy)
+      if (!pHoy?.length) { await sendText(`No hay partidos hoy (${hoy})`); return }
+      const { data: jugs }  = await supabase.from('jugadores').select('*').order('orden')
+      const { data: preds } = await supabase.from('pronosticos').select('*')
+      const img = await generarImagenDia(pHoy, jugs || [], preds || [], hoy)
+      await enviarImagenAlGrupo(img, `📅 PARTIDOS ${hoy} — PRODE MUNDIAL 2026`)
       if (isPrivateAdmin) await sendText('✅ Resumen enviado al grupo')
     }
     else if (senderIsAdmin && texto === '!forzar') {
@@ -373,8 +387,10 @@ cron.schedule('0 11 * * *', async () => {
     const { data: partidos } = await supabase.from('partidos').select('*').eq('fecha', hoy)
     if (!partidos || partidos.length === 0) return
     console.log('Enviando resumen del dia:', hoy)
-    const txt = await tablaDiaTexto(hoy)
-    await enviarAlGrupo(txt)
+    const { data: jugs }  = await supabase.from('jugadores').select('*').order('orden')
+    const { data: preds } = await supabase.from('pronosticos').select('*')
+    const img = await generarImagenDia(partidos, jugs || [], preds || [], hoy)
+    await enviarImagenAlGrupo(img, `📅 PARTIDOS ${hoy} — PRODE MUNDIAL 2026`)
   } catch(e) { console.error('Error cron 8am:', e.message) }
 })
 
