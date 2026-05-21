@@ -220,12 +220,16 @@ async function handleMessage(sock, msg) {
       )
     }
     else if (senderIsAdmin && texto === '!oficial') {
-      if (!groupId) { await sendText('❌ GROUP_ID no configurado'); return }
       const board = await buildBoard()
       if (!board.length) { await sendText('No hay datos aún'); return }
       const img = await generarTablaImagen(board, 'oficial')
-      await enviarImagenAlGrupo(img, '🏆 TABLA OFICIAL — PRODE MUNDIAL 2026')
-      if (isPrivateAdmin) await sendText('✅ Tabla oficial enviada al grupo')
+      if (isPrivateAdmin) {
+        // Desde privado → preview solo para el admin
+        await sendImage(img, '🏆 TABLA OFICIAL — PRODE MUNDIAL 2026')
+      } else {
+        // Desde el grupo → manda al grupo
+        await enviarImagenAlGrupo(img, '🏆 TABLA OFICIAL — PRODE MUNDIAL 2026')
+      }
     }
     else if (senderIsAdmin && texto === '!resumen') {
       if (!groupId) { await sendText('❌ GROUP_ID no configurado'); return }
