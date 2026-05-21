@@ -495,6 +495,42 @@ app.post('/admin/sync', async (req, res) => {
 
 app.get('/', (req, res) => res.json({ status: 'ok', app: 'Prode Bot 2026 (Baileys)' }))
 
+// ── Preview endpoints (para testear imágenes sin WhatsApp) ──
+app.get('/preview/oficial', async (req, res) => {
+  try {
+    const board = await buildBoard()
+    if (!board.length) return res.send('No hay datos')
+    const img = await generarTablaImagen(board, 'oficial')
+    res.setHeader('Content-Type', 'image/png')
+    res.send(img)
+  } catch(e) { res.status(500).send('Error: ' + e.message) }
+})
+
+app.get('/preview/nooficial', async (req, res) => {
+  try {
+    const board = await buildBoard()
+    if (!board.length) return res.send('No hay datos')
+    const { data: pAll } = await supabase.from('partidos').select('id,goles1')
+    const jugados = pAll?.filter(p => p.goles1 !== null).length || 0
+    const img = await generarTablaImagen(board, 'nooficial', { jugados })
+    res.setHeader('Content-Type', 'image/png')
+    res.send(img)
+  } catch(e) { res.status(500).send('Error: ' + e.message) }
+})
+
+app.get('/preview/dia', async (req, res) => {
+  try {
+    const fecha = req.query.fecha || new Date().toISOString().slice(0, 10)
+    const { data: pHoy }  = await supabase.from('partidos').select('*').eq('fecha', fecha)
+    if (!pHoy?.length) return res.send(`No hay partidos el ${fecha}`)
+    const { data: jugs }  = await supabase.from('jugadores').select('*').order('orden')
+    const { data: preds } = await supabase.from('pronosticos').select('*')
+    const img = await generarImagenDia(pHoy, jugs || [], preds || [], fecha)
+    res.setHeader('Content-Type', 'image/png')
+    res.send(img)
+  } catch(e) { res.status(500).send('Error: ' + e.message) }
+})
+
 // ── Arrancar ──────────────────────────────────────────────
 const PORT = process.env.PORT || 3000
 app.listen(PORT, () => console.log(`HTTP en puerto ${PORT}`))
