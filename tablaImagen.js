@@ -1,6 +1,6 @@
 const { createCanvas } = require('@napi-rs/canvas')
 
-const S = 3 // 3x para alta definición al hacer zoom
+const S = 2 // 2x — nítido en móvil, tamaño razonable
 
 const TEAM_ABBR = {
   'México':'MEX','Sudáfrica':'RSA','Rep. de Corea':'KOR','Rep. Checa':'CHE',
