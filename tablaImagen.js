@@ -354,4 +354,108 @@ async function generarTablaImagen(board, tipo = 'oficial', extra = {}) {
   return generarTablaOficial(board)
 }
 
-module.exports = { generarTablaImagen, generarImagenDia }
+
+// ── TABLA PROBABILIDADES ──────────────────────────────────
+async function generarTablaProba(results, sims = 5000) {
+  const M  = 28
+  const LH = 22
+  const W  = 420
+
+  const totalLines = 3 + 1.5 + 2 + results.length + 1 + 2
+  const H = M * 2 + Math.ceil(totalLines) * LH + 10
+
+  const canvas = createCanvas(W * S, H * S)
+  const ctx = canvas.getContext('2d')
+  ctx.scale(S, S)
+
+  ctx.fillStyle = '#f5f0e8'
+  ctx.fillRect(0, 0, W, H)
+  ctx.textBaseline = 'alphabetic'
+
+  const xNum    = M
+  const xNombre = M + 28
+  const xBar    = M + 160
+  const xWin    = W - M - 58
+  const xEpts   = W - M - 8
+
+  let y = M + LH
+
+  ctx.fillStyle = '#1a1a1a'
+  ctx.font = 'bold 13px monospace'
+  ctx.textAlign = 'left'
+  ctx.fillText('PRODE MUNDIAL 2026', xNum, y); y += LH
+
+  ctx.font = '12px monospace'
+  ctx.fillStyle = '#2a2a2a'
+  const fecha = new Date().toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })
+  ctx.fillText(`CHANCES DE GANAR . ${fecha}`, xNum, y); y += LH
+  ctx.fillText(`simulacion ${sims.toLocaleString()} torneos`, xNum, y); y += LH * 1.5
+
+  // Header
+  ctx.font = 'bold 11px monospace'
+  ctx.fillStyle = '#1a1a1a'
+  ctx.textAlign = 'left'
+  ctx.fillText('#', xNum, y)
+  ctx.fillText('JUGADOR', xNombre, y)
+  ctx.textAlign = 'right'
+  ctx.fillText('WIN%', xWin, y)
+  ctx.fillText('E[PTS]', xEpts, y)
+  ctx.textAlign = 'left'
+  y += 6
+
+  ctx.strokeStyle = '#2a2a2a'
+  ctx.lineWidth = 1.5
+  ctx.beginPath(); ctx.moveTo(M, y); ctx.lineTo(W - M, y); ctx.stroke()
+  y += LH
+
+  const inkLevels = ['#1a1a1a','#2a2a2a','#2a2a2a','#3a3a3a','#3a3a3a','#3a3a3a','#4a4a4a','#4a4a4a','#4a4a4a','#555555','#666666','#666666','#666666','#777777','#777777','#888888','#888888','#888888','#999999','#aaaaaa']
+  const maxWin = results[0]?.winPct || 1
+
+  results.forEach((p, i) => {
+    const ink = inkLevels[Math.min(i, inkLevels.length - 1)]
+    const num = String(i + 1).padStart(2, ' ')
+    const nombre = (p.nombre || '').toUpperCase()
+    const displayNombre = nombre.length > 10 ? nombre.slice(0, 10) + '…' : nombre
+
+    // Barra proporcional
+    const barW = 60
+    const barH = 6
+    const filled = Math.round((p.winPct / maxWin) * barW)
+    const barY = y - 10
+
+    ctx.fillStyle = '#e8e0d0'
+    ctx.fillRect(xBar, barY, barW, barH)
+    ctx.fillStyle = i === 0 ? '#3d0070' : i < 3 ? '#7c3aed' : '#aaaaaa'
+    ctx.fillRect(xBar, barY, filled, barH)
+
+    ctx.fillStyle = ink
+    ctx.font = '12px monospace'
+    ctx.textAlign = 'left'
+    ctx.fillText(num, xNum, y)
+    ctx.fillText(displayNombre, xNombre, y)
+    ctx.textAlign = 'right'
+    ctx.font = 'bold 12px monospace'
+    ctx.fillText(`${p.winPct.toFixed(1)}%`, xWin, y)
+    ctx.font = '12px monospace'
+    ctx.fillText(`${p.expectedPts}`, xEpts, y)
+    ctx.textAlign = 'left'
+    y += LH
+  })
+
+  y += 4
+  ctx.strokeStyle = '#2a2a2a'
+  ctx.lineWidth = 1.5
+  ctx.beginPath(); ctx.moveTo(M, y); ctx.lineTo(W - M, y); ctx.stroke()
+  y += LH
+
+  ctx.fillStyle = '#3a3a3a'
+  ctx.font = '11px monospace'
+  ctx.fillText('* basado en odds del mercado', M, y); y += LH * 0.9
+  ctx.fillText('* E[PTS] = puntos esperados totales', M, y)
+
+  const buf = await canvas.encode('png')
+  console.log(`📊 tablaProba: ${results.length} jugadores, ${buf.length} bytes`)
+  return buf
+}
+
+module.exports = { generarTablaImagen, generarImagenDia, generarTablaProba }
