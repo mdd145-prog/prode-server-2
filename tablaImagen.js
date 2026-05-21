@@ -20,13 +20,16 @@ const abbr = n => TEAM_ABBR[n] || n.slice(0,3).toUpperCase()
 
 // ── Tabla OFICIAL ─────────────────────────────────────────
 async function generarTablaOficial(board) {
+  const M = 20       // margen blanco alrededor
   const W = 500
   const HEADER_H = 46
   const COL_H = 26
   const ROW_H = 36
   const FOOTER_H = 24
-  const H = HEADER_H + COL_H + board.length * ROW_H + FOOTER_H
-  const splitX = Math.floor(W * 0.65)
+  const tableW = W - M * 2
+  const tableH = HEADER_H + COL_H + board.length * ROW_H + FOOTER_H
+  const H = tableH + M * 2
+  const splitX = Math.floor(tableW * 0.65)
 
   const canvas = createCanvas(W * S, H * S)
   const ctx = canvas.getContext('2d')
@@ -35,11 +38,15 @@ async function generarTablaOficial(board) {
   ctx.fillStyle = '#ffffff'
   ctx.fillRect(0, 0, W, H)
 
+  // Dibujar tabla con offset M
+  ctx.save()
+  ctx.translate(M, M)
+
   // Header
   ctx.fillStyle = '#6a0dad'
   ctx.fillRect(0, 0, splitX, HEADER_H)
   ctx.fillStyle = '#27ae60'
-  ctx.fillRect(splitX, 0, W - splitX, HEADER_H)
+  ctx.fillRect(splitX, 0, tableW - splitX, HEADER_H)
   ctx.fillStyle = '#ffffff'
   ctx.font = 'bold 16px Arial'
   ctx.textAlign = 'left'
@@ -47,7 +54,7 @@ async function generarTablaOficial(board) {
   ctx.fillText('TABLA OFICIAL', 14, HEADER_H / 2)
   ctx.font = 'bold 10px Arial'
   ctx.textAlign = 'center'
-  ctx.fillText('RESULTADOS', splitX + (W - splitX) / 2, HEADER_H / 2)
+  ctx.fillText('RESULTADOS', splitX + (tableW - splitX) / 2, HEADER_H / 2)
 
   // Columnas
   const cols = [
@@ -58,7 +65,7 @@ async function generarTablaOficial(board) {
     { x: 270, w: 40,  label: '3',   bg: '#27ae60', align: 'center' },
     { x: 310, w: 40,  label: '1',   bg: '#27ae60', align: 'center' },
     { x: 350, w: 40,  label: '0',   bg: '#27ae60', align: 'center' },
-    { x: 390, w: 110, label: '%',   bg: '#1a6b8a', align: 'center' },
+    { x: 390, w: tableW - 390, label: '%',   bg: '#1a6b8a', align: 'center' },
   ]
 
   ctx.textBaseline = 'middle'
@@ -75,7 +82,7 @@ async function generarTablaOficial(board) {
   board.forEach((p, i) => {
     const y = HEADER_H + COL_H + i * ROW_H
     ctx.fillStyle = i % 2 === 0 ? '#d9d9d9' : '#ffffff'
-    ctx.fillRect(0, y, W, ROW_H)
+    ctx.fillRect(0, y, tableW, ROW_H)
     const cy = y + ROW_H / 2
     const nombre = (p.nombre || '').toUpperCase()
     const displayNombre = nombre.length > 14 ? nombre.slice(0, 14) + '…' : nombre
@@ -117,16 +124,18 @@ async function generarTablaOficial(board) {
   // Footer
   const footerY = HEADER_H + COL_H + board.length * ROW_H
   ctx.fillStyle = '#f5f5f5'
-  ctx.fillRect(0, footerY, W, FOOTER_H)
+  ctx.fillRect(0, footerY, tableW, FOOTER_H)
   ctx.strokeStyle = '#dddddd'
   ctx.lineWidth = 0.5
-  ctx.beginPath(); ctx.moveTo(0, footerY); ctx.lineTo(W, footerY); ctx.stroke()
+  ctx.beginPath(); ctx.moveTo(0, footerY); ctx.lineTo(tableW, footerY); ctx.stroke()
   const fecha = new Date().toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
   ctx.fillStyle = '#888888'
   ctx.font = '9px Arial'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  ctx.fillText(`PRODE MUNDIAL 2026  |  ${fecha}  |  Exacto=3pts  Levante=1pt`, W / 2, footerY + FOOTER_H / 2)
+  ctx.fillText(`PRODE MUNDIAL 2026  |  ${fecha}  |  Exacto=3pts  Levante=1pt`, tableW / 2, footerY + FOOTER_H / 2)
+
+  ctx.restore()
 
   const buf = await canvas.encode('png')
   console.log(`📊 tablaOficial: ${board.length} jugadores, ${buf.length} bytes`)
