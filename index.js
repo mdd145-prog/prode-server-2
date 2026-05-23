@@ -7,7 +7,7 @@ const express = require('express')
 const cron = require('node-cron')
 const { createClient } = require('@supabase/supabase-js')
 const axios = require('axios')
-const { generarTablaImagen, generarImagenDia, generarTablaProba } = require('./tablaImagen')
+const { generarTablaImagen, generarImagenDia, generarTablaProba, generarTablaChances } = require('./tablaImagen')
 
 const app = express()
 app.use(express.json())
@@ -175,9 +175,12 @@ async function handleMessage(sock, msg) {
     if (texto === '!tabla') {
       const board = await buildBoard()
       if (!board.length) { await sendText('No hay datos aún'); return }
-      const { data: pAll } = await supabase.from('partidos').select('id,goles1')
+      const hoyFecha = new Date().toISOString().slice(0,10)
+      const { data: pAll }  = await supabase.from('partidos').select('id,goles1')
+      const { data: pHoy }  = await supabase.from('partidos').select('*').eq('fecha', hoyFecha).not('goles1','is',null)
       const jugados = pAll?.filter(p => p.goles1 !== null).length || 0
-      const img = await generarTablaImagen(board, 'nooficial', { jugados })
+      const liveMatches = pHoy || []
+      const img = await generarTablaImagen(board, 'nooficial', { jugados, liveMatches })
       await sendImage(img, '📊 TABLA NO OFICIAL — PRODE MUNDIAL 2026')
     }
     else if (texto === '!hoy') {
@@ -199,17 +202,14 @@ async function handleMessage(sock, msg) {
       await sendImage(img, `📅 PARTIDOS ${fecha} — PRODE MUNDIAL 2026`)
     }
     else if (texto === '!chances') {
-      await sendText(await chancesTexto())
+      const board = await buildBoard()
+      if (!board.length) { await sendText('No hay datos aún'); return }
+      const { data: partidos } = await supabase.from('partidos').select('id,goles1')
+      const img = await generarTablaChances(board, partidos || [])
+      await sendImage(img, '🎯 CHANCES DE GANAR — PRODE MUNDIAL 2026')
     }
-    else if (texto === '!proba') {
-      if (!process.env.ODDS_API_KEY) { await sendText('❌ ODDS_API_KEY no configurada'); return }
-      await sendText('🎲 Calculando probabilidades...')
-      const result = await calcProbaBoard()
-      if (!result) { await sendText('No hay datos suficientes'); return }
-      if (result.oddsCount === 0) { await sendText('⏳ Las odds del Mundial aún no están disponibles. Volvé a intentar más cerca del torneo.'); return }
-      const img = await generarTablaProba(result.results, result.sims)
-      await sendImage(img, `🎲 CHANCES DE GANAR — PRODE MUNDIAL 2026`)
-    }
+    // !proba desactivado temporalmente
+    // else if (texto === '!proba') { ... }
     else if (texto === '!ayuda' || texto === 'hola' || texto === 'ping') {
       await sendText(
         `🤖 *Prode Mundial 2026 — Comandos:*\n\n` +
@@ -217,7 +217,6 @@ async function handleMessage(sock, msg) {
         `!hoy → Partidos de hoy + pronósticos\n` +
         `!dia YYYY-MM-DD → Partidos de una fecha\n` +
         `!chances → Quién sigue en carrera\n` +
-        `!proba → Chances de ganar (odds)\n` +
         `!ayuda → Este mensaje`
       )
     }
@@ -655,6 +654,16 @@ app.get('/preview/oficial', async (req, res) => {
     res.setHeader('Content-Type', 'image/png')
     res.send(img)
   } catch(e) { res.status(500).send('Error: ' + e.message) }
+})
+
+app.get('/preview/chances', async (req, res) => {
+  try {
+    const board = await buildBoard()
+    if (!board.length) return res.send('No hay datos')
+    const { data: partidos } = await supabase.from('partidos').select('id,goles1')
+    const img = await generarTablaChances(board, partidos||[])
+    res.setHeader('Content-Type','image/png'); res.send(img)
+  } catch(e){res.status(500).send('Error: '+e.message)}
 })
 
 app.get('/preview/nooficial', async (req, res) => {
