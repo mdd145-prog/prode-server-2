@@ -173,6 +173,7 @@ async function handleMessage(sock, msg) {
 
   try {
     if (texto === '!tabla') {
+      await verificarPartidosEnVivo(false)
       const board = await buildBoard()
       if (!board.length) { await sendText('No hay datos aún'); return }
       const hoyFecha = new Date().toISOString().slice(0,10)
@@ -221,6 +222,7 @@ async function handleMessage(sock, msg) {
       )
     }
     else if (senderIsAdmin && texto === '!oficial') {
+      await verificarPartidosEnVivo(false)
       const board = await buildBoard()
       if (!board.length) { await sendText('No hay datos aún'); return }
       const img = await generarTablaImagen(board, 'oficial')
