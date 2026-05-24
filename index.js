@@ -516,8 +516,9 @@ async function verificarPartidosEnVivo(forzar = false) {
   }
 }
 
+
 cron.schedule('*/2 * * * *', async () => {
-  if (new Date().getHours() >= 12) await verificarPartidosEnVivo()
+  await verificarPartidosEnVivo()
 })
 
 // Cron 8am Argentina (11am UTC) — manda resumen del dia si hay partidos
