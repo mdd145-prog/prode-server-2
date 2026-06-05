@@ -478,7 +478,8 @@ async function verificarPartidosEnVivo(forzar = false) {
     const dateFrom    = new Date(ahora - 24 * 3600 * 1000).toISOString().slice(0, 10)
     const dateTo      = new Date(ahora + 24 * 3600 * 1000).toISOString().slice(0, 10)
     const competition = process.env.FOOTBALL_COMPETITION || 'WC'
-    const res = await axios.get(`https://api.football-data.org/v4/competitions/${competition}/matches`, {
+    const apiBase     = process.env.FOOTBALL_API_BASE || 'https://api.football-data.org'
+    const res = await axios.get(`${apiBase}/v4/competitions/${competition}/matches`, {
       params: { dateFrom, dateTo },
       headers: { 'X-Auth-Token': process.env.FOOTBALL_API_KEY },
       timeout: 10000

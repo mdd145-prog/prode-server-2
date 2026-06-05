@@ -205,6 +205,8 @@ async function generarTablaNoOficial(board, jugados = 0, liveMatches = []) {
 
 // ── IMAGEN DEL DÍA ────────────────────────────────────────
 async function generarImagenDia(partidos, jugadores, pronosticos, fecha) {
+  // ordenar columnas por hora del partido (solo presentación, no toca datos)
+  partidos = [...partidos].sort((a, b) => (a.hora || '').localeCompare(b.hora || ''))
   const M        = 20
   const GAP      = 12
   const nM       = partidos.length
