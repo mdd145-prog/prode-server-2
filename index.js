@@ -8,6 +8,7 @@ const cron = require('node-cron')
 const { createClient } = require('@supabase/supabase-js')
 const axios = require('axios')
 const { generarTablaImagen, generarImagenDia, generarTablaProba, generarTablaChances } = require('./tablaImagen')
+const silvina = require('./silvina')
 
 const app = express()
 app.use(express.json())
@@ -119,16 +120,51 @@ async function tablaDiaTexto(fecha) {
   return lines.join('\n')
 }
 
+function rachaExactos(jugadorId, partidos, pronosticos) {
+  const jugados = partidos.filter(p => p.goles1 !== null)
+    .sort((a, b) => (b.fecha + (b.hora || '')).localeCompare(a.fecha + (a.hora || '')))
+  let racha = 0
+  for (const p of jugados) {
+    const pred = pronosticos.find(x => x.jugador_id === jugadorId && x.partido_id === p.id)
+    if (calcPts(pred, p) === 3) racha++
+    else break
+  }
+  return racha
+}
+
 async function mensajeFinPartido(partido) {
   const { data: jugadores }   = await supabase.from('jugadores').select('*').order('orden')
-  const { data: pronosticos } = await supabase.from('pronosticos').select('*').eq('partido_id', partido.id)
-  const lines = [`⚽ *FIN: ${partido.equipo1} ${partido.goles1}-${partido.goles2} ${partido.equipo2}*`, ``]
-  ;(jugadores || []).forEach(j => {
-    const pred    = pronosticos?.find(p => p.jugador_id === j.id)
-    const predTxt = pred && pred.goles1 !== null ? `${pred.goles1}-${pred.goles2}` : '-'
-    const pts     = calcPts(pred, partido)
-    lines.push(`${pts === 3 ? '✅ +3' : pts === 1 ? '📈 +1' : '❌  0'} *${j.nombre}* pronosticó ${predTxt}`)
-  })
+  const { data: partidos }    = await supabase.from('partidos').select('*')
+  const { data: pronosticos } = await supabase.from('pronosticos').select('*')
+  const resTxt = `*${partido.equipo1} ${partido.goles1}-${partido.goles2} ${partido.equipo2}*`
+
+  const filas = [], exactos = [], sinPron = []
+  for (const j of (jugadores || [])) {
+    const pred = pronosticos?.find(p => p.jugador_id === j.id && p.partido_id === partido.id)
+    if (!pred || pred.goles1 === null) { sinPron.push(j.nombre); continue }
+    const pts  = calcPts(pred, partido)
+    const icon = pts === 3 ? '✅ +3' : pts === 1 ? '📈 +1' : '❌  0'
+    if (pts === 3) exactos.push(j.nombre)
+    filas.push({ pts, line: `${icon} *${j.nombre}* (${pred.goles1}-${pred.goles2})` })
+  }
+  filas.sort((a, b) => b.pts - a.pts)
+
+  const lines = [silvina.introFin(resTxt), '', ...filas.map(f => f.line)]
+  if (sinPron.length) lines.push(silvina.sinPronostico(sinPron))
+  lines.push('', exactos.length ? silvina.gastadaExactos(exactos) : silvina.nadieExacto())
+
+  // rachas de exactos (2 o más al hilo)
+  const partidosAct = (partidos || []).map(p => p.id === partido.id ? { ...p, goles1: partido.goles1, goles2: partido.goles2 } : p)
+  for (const nombre of exactos) {
+    const j = jugadores.find(x => x.nombre === nombre)
+    const r = rachaExactos(j.id, partidosAct, pronosticos || [])
+    if (r >= 2) lines.push(silvina.racha(nombre, r))
+  }
+
+  const board = await buildBoard()
+  if (board[0] && board[0].tot > 0) lines.push(silvina.lider(board[0]))
+  const cierre = silvina.cierreFin()
+  if (cierre) lines.push('', cierre)
   return lines.join('\n')
 }
 
@@ -318,7 +354,7 @@ async function handleResultadoManual(sock, texto, respondTo) {
       try {
         const board = await buildBoard()
         const img   = await generarTablaImagen(board, 'oficial')
-        await enviarImagenAlGrupo(img, '')
+        await enviarImagenAlGrupo(img, silvina.captionOficial())
       } catch(e) { console.error(e.message) }
     }, 3000)
   }
@@ -326,6 +362,7 @@ async function handleResultadoManual(sock, texto, respondTo) {
 
 // ── Polling football-data.org ─────────────────────────────
 const finalizados = new Set()
+let liderActual = null  // para detectar cambios de punta en vivo
 // ── Odds API (cache 1 hora) ───────────────────────────────
 let oddsCache = { data: null, ts: 0 }
 
@@ -489,6 +526,7 @@ async function verificarPartidosEnVivo(forzar = false) {
     // Matcheo por nombres contra todos los partidos (en fase de grupos cada cruce es único)
     const { data: dbPartidos } = await supabase.from('partidos').select('*')
 
+    let huboUpdate = false
     for (const f of matches) {
       const status = f.status
       const g1     = f.score?.fullTime?.home ?? null
@@ -500,6 +538,7 @@ async function verificarPartidosEnVivo(forzar = false) {
 
       if (g1 !== null && g2 !== null && (partido.goles1 !== g1 || partido.goles2 !== g2)) {
         await supabase.from('partidos').update({ goles1: g1, goles2: g2 }).eq('id', partido.id)
+        huboUpdate = true
         if (forzar) console.log(`📊 ${partido.equipo1} ${g1}-${g2} ${partido.equipo2}`)
       }
 
@@ -516,9 +555,22 @@ async function verificarPartidosEnVivo(forzar = false) {
           try {
             const board = await buildBoard()
             const img   = await generarTablaImagen(board, 'oficial')
-            await enviarImagenAlGrupo(img, '')
+            await enviarImagenAlGrupo(img, silvina.captionOficial())
           } catch(e) { console.error(e.message) }
         }, 3000)
+      }
+    }
+
+    // Cambio de líder en vivo (solo con punta en solitario, para no anunciar empates)
+    if (huboUpdate) {
+      const board = await buildBoard()
+      if (board.length > 1 && board[0].tot > board[1].tot) {
+        const punta = board[0].nombre
+        if (liderActual && punta !== liderActual) {
+          await enviarAlGrupo(silvina.cambioLider(punta, liderActual))
+          console.log(`👑 Cambio de líder: ${liderActual} → ${punta}`)
+        }
+        liderActual = punta
       }
     }
   } catch (e) {
@@ -532,6 +584,59 @@ cron.schedule('*/2 * * * *', async () => {
   await verificarPartidosEnVivo()
 })
 
+// Previa: 15 min antes de cada partido, Silvina cuenta qué pronosticó cada uno
+const previaAnunciada = new Set()
+const ahoraARGmin = () => {
+  const s = new Date().toLocaleTimeString('en-GB', { timeZone: 'America/Argentina/Buenos_Aires', hour12: false })
+  const [h, m] = s.split(':')
+  return parseInt(h) * 60 + parseInt(m)
+}
+
+cron.schedule('*/5 * * * *', async () => {
+  try {
+    if (!process.env.GROUP_ID || !botSock) return
+    const hoy = hoyARG()
+    const { data: pHoy } = await supabase.from('partidos').select('*').eq('fecha', hoy).is('goles1', null)
+    if (!pHoy?.length) return
+    const ahora = ahoraARGmin()
+    const proximos = pHoy.filter(p => {
+      if (!p.hora || previaAnunciada.has(p.id)) return false
+      const [h, m] = p.hora.split(':').map(Number)
+      const diff = h * 60 + m - ahora
+      return diff > 0 && diff <= 15
+    })
+    if (!proximos.length) return
+    proximos.forEach(p => previaAnunciada.add(p.id))
+    const { data: jugadores }   = await supabase.from('jugadores').select('*').order('orden')
+    const { data: pronosticos } = await supabase.from('pronosticos').select('*')
+    await enviarAlGrupo(silvina.previa(proximos, jugadores || [], pronosticos || []))
+    console.log(`🍿 Previa enviada: ${proximos.map(p => p.equipo1 + '-' + p.equipo2).join(', ')}`)
+  } catch (e) { console.error('Error previa:', e.message) }
+})
+
+// Resumen nocturno de Silvina — 01:30 ARG (04:30 UTC), cierra el día anterior
+cron.schedule('30 4 * * *', async () => {
+  try {
+    const ayer = new Date(Date.now() - 24 * 3600e3).toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
+    const { data: partidos } = await supabase.from('partidos').select('*')
+    const delDia = (partidos || []).filter(p => p.fecha === ayer && p.goles1 !== null)
+    if (!delDia.length) return
+    const { data: jugadores }   = await supabase.from('jugadores').select('*').order('orden')
+    const { data: pronosticos } = await supabase.from('pronosticos').select('*')
+    const stats = (jugadores || []).map(j => {
+      let pts = 0, ex = 0, fail = 0
+      for (const p of delDia) {
+        const pr = pronosticos?.find(x => x.jugador_id === j.id && x.partido_id === p.id)
+        const k = calcPts(pr, p)
+        if (k === 3) { pts += 3; ex++ } else if (k === 1) { pts++ } else if (k === 0) { fail++ }
+      }
+      return { nombre: j.nombre, pts, ex, fail }
+    }).sort((a, b) => b.pts - a.pts)
+    await enviarAlGrupo(silvina.resumenNocturno(ayer, delDia, stats))
+    console.log('🌙 Resumen nocturno enviado:', ayer)
+  } catch (e) { console.error('Error resumen nocturno:', e.message) }
+})
+
 // Cron 8am Argentina (11am UTC) — manda resumen del dia si hay partidos
 cron.schedule('0 11 * * *', async () => {
   try {
@@ -542,7 +647,7 @@ cron.schedule('0 11 * * *', async () => {
     const { data: jugs }  = await supabase.from('jugadores').select('*').order('orden')
     const { data: preds } = await supabase.from('pronosticos').select('*')
     const img = await generarImagenDia(partidos, jugs || [], preds || [], hoy)
-    await enviarImagenAlGrupo(img, '')
+    await enviarImagenAlGrupo(img, silvina.captionDia())
   } catch(e) { console.error('Error cron 8am:', e.message) }
 })
 
