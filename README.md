@@ -1,33 +1,55 @@
 # Prode Bot 2026 — Servidor
 
+Bot de WhatsApp (Baileys) + Supabase + football-data.org para el Prode del Mundial 2026.
+
 ## Variables de entorno necesarias
 
-Crear un archivo `.env` con:
+Crear un archivo `.env` (o configurarlas en Render):
 
 ```
-SUPABASE_URL=https://pgapjiunfbltefklhcwm.supabase.co
-SUPABASE_KEY=tu_supabase_secret_key
-WA_TOKEN=tu_meta_token
-WA_PHONE_ID=1065187280019385
-WA_BUSINESS_ID=980297514379405
-WA_VERIFY_TOKEN=prode2026verify
-APISPORTS_KEY=tu_api_sports_key
-GROUP_ID=id_del_grupo_de_whatsapp
+SUPABASE_URL=https://TU_PROYECTO.supabase.co
+SUPABASE_KEY=service_role_key_secreta   # ⚠️ debe ser la service_role, NO la anon
+GROUP_ID=id_del_grupo@g.us              # grupo de WhatsApp destino
+ADMIN_JID=549XXXXXXXXXX@s.whatsapp.net  # número del admin (opcional, tiene default)
+FOOTBALL_API_KEY=tu_api_key_de_football-data.org
+FOOTBALL_COMPETITION=WC                 # WC = Mundial (cambiar solo para pruebas)
+ODDS_API_KEY=tu_key_de_the-odds-api     # opcional, para !proba
+ADMIN_TOKEN=token_secreto_largo         # protege los endpoints /admin/*
 PORT=3000
 ```
 
+> **Seguridad:** los endpoints `/admin/*` requieren el header `x-admin-token: $ADMIN_TOKEN`.
+> Sin `ADMIN_TOKEN` configurado, esos endpoints quedan deshabilitados (503).
+> Las políticas RLS de la base están en `sql/rls.sql` — correrlas en el SQL Editor de Supabase.
+
 ## Comandos del bot en el grupo
 
-- `!tabla` → Tabla de posiciones en texto
-- `!oficial` → Tabla oficial como imagen JPG
-- `!hoy` → Partidos del día con pronósticos
+- `!tabla` → Tabla NO OFICIAL como imagen (con partidos en vivo)
+- `!hoy` → Partidos del día con pronósticos (imagen)
+- `!dia YYYY-MM-DD` → Partidos de una fecha (imagen)
+- `!chances` → Quién sigue en carrera
 - `!ayuda` → Lista de comandos
+
+### Comandos solo admin
+
+- `!oficial` → Tabla oficial (preview en privado, al grupo si se manda desde el grupo)
+- `!resumen` → Manda el resumen del día al grupo
+- `!forzar` → Manda la tabla oficial al grupo
+- `!sync` → Fuerza sincronización con la API de resultados
+- `!resultado Equipo1 g1 Equipo2 g2` → Carga un resultado a mano
+- `!estado` → Estado del bot
 
 ## Comportamiento automático
 
-- Detecta goles cada 2 minutos via API-Sports
-- Cuando termina un partido → manda resultado con puntos
-- Manda tabla oficial actualizada automáticamente
+- Polling de resultados cada 2 minutos vía football-data.org
+- Cuando termina un partido → manda resultado con puntos + tabla oficial
+- Cron 8am (hora Argentina) → manda el resumen del día si hay partidos
+
+## Endpoints
+
+- `GET /qr` → QR para vincular WhatsApp
+- `GET /preview/oficial|nooficial|chances|dia|proba` → preview de imágenes
+- `POST /admin/sync` → carga masiva de jugadores/pronósticos (requiere `x-admin-token`)
 
 ## Deploy en Render
 
@@ -36,4 +58,3 @@ PORT=3000
 3. Build command: `npm install`
 4. Start command: `npm start`
 5. Agregar todas las variables de entorno
-6. Copiar la URL del servidor para configurar el webhook de Meta

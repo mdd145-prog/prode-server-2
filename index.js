@@ -46,6 +46,9 @@ const TEAM_MAP = {
 }
 const mapTeam = n => TEAM_MAP[n] || n
 
+// Fecha de hoy en Argentina (YYYY-MM-DD) — evita el desfasaje con UTC después de las 21:00
+const hoyARG = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
+
 // ── Estado global ─────────────────────────────────────────
 let botSock  = null
 let ultimoQR = null
@@ -176,7 +179,7 @@ async function handleMessage(sock, msg) {
       await verificarPartidosEnVivo(false)
       const board = await buildBoard()
       if (!board.length) { await sendText('No hay datos aún'); return }
-      const hoyFecha = new Date().toISOString().slice(0,10)
+      const hoyFecha = hoyARG()
       const { data: pAll }  = await supabase.from('partidos').select('id,goles1')
       const { data: pHoy }  = await supabase.from('partidos').select('*').eq('fecha', hoyFecha).not('goles1','is',null)
       const jugados = pAll?.filter(p => p.goles1 !== null).length || 0
@@ -185,7 +188,7 @@ async function handleMessage(sock, msg) {
       await sendImage(img, '')
     }
     else if (texto === '!hoy') {
-      const hoy = new Date().toISOString().slice(0, 10)
+      const hoy = hoyARG()
       const { data: pHoy }  = await supabase.from('partidos').select('*').eq('fecha', hoy)
       if (!pHoy?.length) { await sendText(`No hay partidos hoy (${hoy})`); return }
       const { data: jugs }  = await supabase.from('jugadores').select('*').order('orden')
@@ -236,7 +239,7 @@ async function handleMessage(sock, msg) {
     }
     else if (senderIsAdmin && texto === '!resumen') {
       if (!groupId) { await sendText('❌ GROUP_ID no configurado'); return }
-      const hoy = new Date().toISOString().slice(0, 10)
+      const hoy = hoyARG()
       const { data: pHoy }  = await supabase.from('partidos').select('*').eq('fecha', hoy)
       if (!pHoy?.length) { await sendText(`No hay partidos hoy (${hoy})`); return }
       const { data: jugs }  = await supabase.from('jugadores').select('*').order('orden')
@@ -470,16 +473,20 @@ async function chancesTexto() {
 async function verificarPartidosEnVivo(forzar = false) {
   if (!process.env.FOOTBALL_API_KEY) { if (forzar) console.log('⚠ FOOTBALL_API_KEY no configurada'); return }
   try {
-    const hoy         = new Date().toISOString().slice(0, 10)
+    // Ventana de ±1 día: un partido a las 22:00/23:00 ARG ya es "mañana" en UTC para la API
+    const ahora       = Date.now()
+    const dateFrom    = new Date(ahora - 24 * 3600 * 1000).toISOString().slice(0, 10)
+    const dateTo      = new Date(ahora + 24 * 3600 * 1000).toISOString().slice(0, 10)
     const competition = process.env.FOOTBALL_COMPETITION || 'WC'
     const res = await axios.get(`https://api.football-data.org/v4/competitions/${competition}/matches`, {
-      params: { dateFrom: hoy, dateTo: hoy },
+      params: { dateFrom, dateTo },
       headers: { 'X-Auth-Token': process.env.FOOTBALL_API_KEY },
       timeout: 10000
     })
     const matches = res.data?.matches || []
-    if (forzar) console.log(`📡 API: ${matches.length} partidos encontrados`)
-    const { data: dbHoy } = await supabase.from('partidos').select('*').eq('fecha', hoy)
+    if (forzar) console.log(`📡 API: ${matches.length} partidos encontrados (${dateFrom} a ${dateTo})`)
+    // Matcheo por nombres contra todos los partidos (en fase de grupos cada cruce es único)
+    const { data: dbPartidos } = await supabase.from('partidos').select('*')
 
     for (const f of matches) {
       const status = f.status
@@ -487,7 +494,7 @@ async function verificarPartidosEnVivo(forzar = false) {
       const g2     = f.score?.fullTime?.away ?? null
       const t1     = mapTeam(f.homeTeam?.name || '')
       const t2     = mapTeam(f.awayTeam?.name || '')
-      const partido = dbHoy?.find(p => (p.equipo1 === t1 && p.equipo2 === t2) || (p.equipo1 === t2 && p.equipo2 === t1))
+      const partido = dbPartidos?.find(p => (p.equipo1 === t1 && p.equipo2 === t2) || (p.equipo1 === t2 && p.equipo2 === t1))
       if (!partido) { if (forzar) console.log(`⚠ No encontrado: "${t1}" vs "${t2}"`); continue }
 
       if (g1 !== null && g2 !== null && (partido.goles1 !== g1 || partido.goles2 !== g2)) {
@@ -495,8 +502,11 @@ async function verificarPartidosEnVivo(forzar = false) {
         if (forzar) console.log(`📊 ${partido.equipo1} ${g1}-${g2} ${partido.equipo2}`)
       }
 
-      const key = `${hoy}_${partido.id}`
-      if (status === 'FINISHED' && !finalizados.has(key)) {
+      const key = partido.id
+      // Solo anunciar finales recientes (evita re-anunciar viejos si el server se reinicia)
+      const inicioMs = new Date(f.utcDate || 0).getTime()
+      const esReciente = ahora - inicioMs < 4 * 3600 * 1000
+      if (status === 'FINISHED' && esReciente && !finalizados.has(key)) {
         finalizados.add(key)
         const msgFin = await mensajeFinPartido({ ...partido, goles1: g1, goles2: g2 })
         await enviarAlGrupo(msgFin)
@@ -524,7 +534,7 @@ cron.schedule('*/2 * * * *', async () => {
 // Cron 8am Argentina (11am UTC) — manda resumen del dia si hay partidos
 cron.schedule('0 11 * * *', async () => {
   try {
-    const hoy = new Date().toISOString().slice(0, 10)
+    const hoy = hoyARG()
     const { data: partidos } = await supabase.from('partidos').select('*').eq('fecha', hoy)
     if (!partidos || partidos.length === 0) return
     console.log('Enviando resumen del dia:', hoy)
@@ -619,6 +629,14 @@ app.get('/qr', async (req, res) => {
   } catch(e) { res.status(500).send('Error: ' + e.message) }
 })
 
+// Auth para endpoints /admin/* — requiere header x-admin-token igual a ADMIN_TOKEN
+app.use('/admin', (req, res, next) => {
+  const token = process.env.ADMIN_TOKEN
+  if (!token) return res.status(503).json({ error: 'ADMIN_TOKEN no configurado en el server' })
+  if (req.headers['x-admin-token'] !== token) return res.status(401).json({ error: 'No autorizado' })
+  next()
+})
+
 app.post('/admin/sync', async (req, res) => {
   const { jugadores, pronosticos } = req.body
   if (jugadores) await supabase.from('jugadores').upsert(jugadores)
@@ -683,7 +701,7 @@ app.get('/preview/nooficial', async (req, res) => {
 
 app.get('/preview/dia', async (req, res) => {
   try {
-    const fecha = req.query.fecha || new Date().toISOString().slice(0, 10)
+    const fecha = req.query.fecha || hoyARG()
     const { data: pHoy }  = await supabase.from('partidos').select('*').eq('fecha', fecha)
     if (!pHoy?.length) return res.send(`No hay partidos el ${fecha}`)
     const { data: jugs }  = await supabase.from('jugadores').select('*').order('orden')
