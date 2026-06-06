@@ -342,7 +342,14 @@ async function handleMessage(sock, msg) {
       if (charlaActiva || ahora - charlaSilvina.fin > 60000) {
         charlaSilvina.turnos = charlaActiva ? charlaSilvina.turnos + 1 : 1
         charlaSilvina.ts = ahora
-        await sendText(silvina.charla(texto, charlaSilvina.turnos, msg.pushName))
+        const fs = require('fs'), path = require('path')
+        const fotoSilvina = path.join(__dirname, 'media', 'silvina.jpg')
+        if (silvina.pideFoto(texto) && fs.existsSync(fotoSilvina)) {
+          // Le pidieron una foto de ella → manda su foto con caption coqueto
+          await sock.sendMessage(respondTo, { image: fs.readFileSync(fotoSilvina), caption: silvina.captionFoto(), mimetype: 'image/jpeg' })
+        } else {
+          await sendText(silvina.charla(texto, charlaSilvina.turnos, msg.pushName))
+        }
         if (charlaSilvina.turnos >= 3) charlaSilvina = { turnos: 0, ts: 0, fin: ahora }
       }
     }

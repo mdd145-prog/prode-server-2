@@ -223,6 +223,19 @@ const DESPEDIDAS = [
   n => `Hasta acá llegamos, ${n}. Una dama sabe cuándo retirarse... y cuándo volver 😏`,
 ]
 
+// ── FOTO DE SILVINA ───────────────────────────────────────
+// Detecta cuando le piden una foto de ella (manda media/silvina.jpg)
+const FOTO_RE = /foto|selfie|mostrate|mostr[aá]( la)? cara|c[oó]mo sos|quiero verte|dejame verte|a ver(te)? una/i
+
+const CAPTIONS_FOTO = [
+  `😘 Para que dejen de imaginar. Sí, soy yo.`,
+  `💅 Acá estoy. Ahora entienden por qué el grupo anda tan atento, ¿no?`,
+  `😏 Una sola, que después se enamoran y dejan de pronosticar.`,
+  `💋 Tomá. Pero la tabla la seguís pidiendo con !tabla, eh.`,
+  `😘 Esta soy yo. La que se sabe TODOS sus pronósticos de memoria.`,
+  `🔥 Bueno, pero dejen de pedir que una tiene un Mundial que atender.`,
+]
+
 // ── !TETAS ────────────────────────────────────────────────
 // Si no hay fotos en media/tetas/, contesta con una de estas:
 const TETAS = [
@@ -300,6 +313,11 @@ module.exports = {
     if (PIROPO_RE.test(texto)) return pick(COQUETAS)(n)
     return pick(turno === 1 ? CHISMOSAS : SEGUNDAS)(n)
   },
+
+  // ¿Le están pidiendo una foto de ella? (excluye pedidos de tabla/partidos)
+  pideFoto: texto => FOTO_RE.test(texto) && !/tabla|partido|punto/.test(texto),
+
+  captionFoto: () => pick(CAPTIONS_FOTO),
 
   tetas: nombre => pick(TETAS)(nombre || 'amor'),
 
