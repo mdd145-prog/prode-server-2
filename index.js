@@ -53,6 +53,7 @@ const hoyARG = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America
 // ── Estado global ─────────────────────────────────────────
 let botSock  = null
 let ultimoQR = null
+let ultimaMencion = 0  // anti-spam para respuestas de Silvina
 
 // ── Lógica de puntos ──────────────────────────────────────
 function calcPts(pred, partido) {
@@ -306,6 +307,13 @@ async function handleMessage(sock, msg) {
         `📊 *Estado:*\nJugadores: ${j?.length || 0}\nPartidos jugados: ${p?.length || 0}/72\n` +
         `GROUP_ID: ${groupId || '❌ NO CONFIGURADO'}\nAPI fútbol: ${process.env.FOOTBALL_API_KEY ? '✅' : '❌'}`
       )
+    }
+    else if (texto.includes('silvina') && !texto.startsWith('!')) {
+      // La nombraron en el grupo → responde con onda (máx. 1 vez por minuto para no spamear)
+      if (Date.now() - ultimaMencion > 60000) {
+        ultimaMencion = Date.now()
+        await sendText(silvina.respuesta())
+      }
     }
     else if (testingMode) {
       await sendText(`Recibí: "${texto.slice(0,50)}". Probá con !ayuda`)
@@ -612,6 +620,29 @@ cron.schedule('*/5 * * * *', async () => {
     await enviarAlGrupo(silvina.previa(proximos, jugadores || [], pronosticos || []))
     console.log(`🍿 Previa enviada: ${proximos.map(p => p.equipo1 + '-' + p.equipo2).join(', ')}`)
   } catch (e) { console.error('Error previa:', e.message) }
+})
+
+// Reclamo de pronósticos — 10:00 ARG (13:00 UTC), todos los días hasta el fin de grupos.
+// Silvina seduce a los que no completaron sus 72.
+const WEB_URL = 'https://mdd145-prog.github.io/Prode-Mundial-2026-LVM/'
+cron.schedule('0 13 * * *', async () => {
+  try {
+    if (hoyARG() > '2026-06-27') return  // termina con la fase de grupos
+    const { data: jugadores }   = await supabase.from('jugadores').select('*').order('orden')
+    const { data: pronosticos } = await supabase.from('pronosticos').select('jugador_id,goles1')
+    if (!jugadores?.length) return
+    const conteo = j => (pronosticos || []).filter(p => p.jugador_id === j.id && p.goles1 !== null).length
+    const sinNada = [], incompletos = [], completos = []
+    for (const j of jugadores) {
+      const done = conteo(j)
+      if (done === 0) sinNada.push(j.nombre)
+      else if (done < 72) incompletos.push({ nombre: j.nombre, done })
+      else completos.push(j.nombre)
+    }
+    if (!sinNada.length && !incompletos.length) return  // todos cumplieron, Silvina descansa
+    await enviarAlGrupo(silvina.reclamo(sinNada, incompletos, completos, WEB_URL))
+    console.log(`💋 Reclamo enviado: ${sinNada.length} sin nada, ${incompletos.length} a medias`)
+  } catch (e) { console.error('Error reclamo:', e.message) }
 })
 
 // Resumen nocturno de Silvina — 01:30 ARG (04:30 UTC), cierra el día anterior

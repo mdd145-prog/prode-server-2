@@ -94,6 +94,34 @@ const AMARGO = [
   n => `🥶 *${n}*, hoy mejor ni abras el grupo. Beso.`,
 ]
 
+// ── RECLAMO DE PRONÓSTICOS (modo seductora) ───────────────
+const INTROS_RECLAMO = [
+  `🔥 Buen día mis amores... Silvina tiene un problemita: hay gente que todavía no me dio sus pronósticos. Y a mí que me dejen esperando no me gusta nadita...`,
+  `😏 Buen día. Anoche me quedé pensando en ustedes... bueno, en algunos. En los que todavía no me mandaron sus 72 resultados, precisamente.`,
+  `💋 Buen día, corazones. Les cuento un secreto: no hay nada que me guste más que un prode completo. Y varios de acá me tienen a puro suspiro...`,
+  `🔥 Día nuevo, reclamo viejo: sigo esperando pronósticos. No me hagan rogar, que rogando no soy tan simpática...`,
+]
+const CIERRES_RECLAMO = [
+  url => `Completalo acá que es un ratito, y después hablamos... 😘\n${url}`,
+  url => `Te dejo el lugar de siempre, te espero ahí 😏\n${url}`,
+  url => `Ya sabés dónde encontrarme, no me falles esta noche...\n${url}`,
+]
+const PIROPOS_CUMPLIDORES = [
+  ns => `Y a los que ya me dieron todo (${ns})... ustedes ya saben que son mis favoritos 😘`,
+  ns => `${ns}: ustedes ya cumplieron. Lo que es ser caballeros... los demás, aprendan.`,
+  ns => `Mención especial para ${ns}, que me dieron sus 72 sin chistar. Eso, señores, enamora.`,
+]
+
+// ── RESPUESTAS CUANDO LA NOMBRAN ──────────────────────────
+const RESPUESTAS = [
+  `¿Me llamaron? 😏 Acá estoy. Si querés algo concreto pedímelo con !ayuda, si querés chisme... también tengo.`,
+  `Presente, mi amor. ¿Tabla, chisme o me extrañabas nomás?`,
+  `Acá estoy, siempre atenta. Más atenta que algunos con sus pronósticos, eh... 👀`,
+  `¿Sí? Decime. Pero rapidito que estoy mirando los partidos y tomando nota de TODO.`,
+  `Me nombraron y aparecí, como los buenos chismes 💅 ¿Qué necesitás? (!ayuda tiene la lista)`,
+  `Hola hermoso. Si es por la tabla: !tabla. Si es por mí: estoy ocupada hasta julio 😘`,
+]
+
 // ── API del módulo ────────────────────────────────────────
 const juntarNombres = ns => ns.length === 1 ? `*${ns[0]}*` :
   ns.slice(0, -1).map(n => `*${n}*`).join(', ') + ' y *' + ns[ns.length - 1] + '*'
@@ -137,6 +165,17 @@ module.exports = {
   captionOficial: () => pick(CAPTIONS_OFICIAL),
 
   captionDia: () => pick(CAPTIONS_DIA),
+
+  respuesta: () => pick(RESPUESTAS),
+
+  reclamo: (sinNada, incompletos, completos, url) => {
+    const lines = [pick(INTROS_RECLAMO), '']
+    if (sinNada.length) lines.push(`😘 Me deben sus 72 enteritos: *${sinNada.join(', ')}*`)
+    if (incompletos.length) lines.push(`🧮 Empezaron pero me dejaron a medias (peor todavía): ${incompletos.map(x => `*${x.nombre}* (${x.done}/72)`).join(', ')}`)
+    lines.push('', pick(CIERRES_RECLAMO)(url))
+    if (completos.length) lines.push('', pick(PIROPOS_CUMPLIDORES)(completos.join(', ')))
+    return lines.join('\n')
+  },
 
   resumenNocturno: (fecha, partidosDia, stats) => {
     const f = new Date(fecha + 'T12:00:00').toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })
