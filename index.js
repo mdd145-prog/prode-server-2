@@ -53,7 +53,7 @@ const hoyARG = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America
 // ── Estado global ─────────────────────────────────────────
 let botSock  = null
 let ultimoQR = null
-let ultimaMencion = 0  // anti-spam para respuestas de Silvina
+let charlaSilvina = { turnos: 0, ts: 0, fin: 0 }  // ida y vuelta con Silvina (máx. 3 turnos, ventana 2 min)
 
 // ── Lógica de puntos ──────────────────────────────────────
 function calcPts(pred, partido) {
@@ -182,6 +182,14 @@ async function enviarImagenAlGrupo(buffer, caption) {
   await botSock.sendMessage(g, { image: buffer, caption, mimetype: 'image/png' })
 }
 
+// ¿El mensaje es una respuesta (quote) a un mensaje del bot? → Silvina sigue la charla
+function esReplyAlBot(msg) {
+  const quotedJid = msg.message?.extendedTextMessage?.contextInfo?.participant
+  const botJid = botSock?.user?.id
+  if (!quotedJid || !botJid) return false
+  return quotedJid.split(/[:@]/)[0] === botJid.split(/[:@]/)[0]
+}
+
 // ── Handler de mensajes ───────────────────────────────────
 async function handleMessage(sock, msg) {
   const groupId     = process.env.GROUP_ID
@@ -258,6 +266,7 @@ async function handleMessage(sock, msg) {
         `!hoy → Partidos de hoy + pronósticos\n` +
         `!dia YYYY-MM-DD → Partidos de una fecha\n` +
         `!chances → Quién sigue en carrera\n` +
+        `!tetas → Probá y vas a ver 😏\n` +
         `!ayuda → Este mensaje`
       )
     }
@@ -308,11 +317,33 @@ async function handleMessage(sock, msg) {
         `GROUP_ID: ${groupId || '❌ NO CONFIGURADO'}\nAPI fútbol: ${process.env.FOOTBALL_API_KEY ? '✅' : '❌'}`
       )
     }
-    else if (texto.includes('silvina') && !texto.startsWith('!')) {
-      // La nombraron en el grupo → responde con onda (máx. 1 vez por minuto para no spamear)
-      if (Date.now() - ultimaMencion > 60000) {
-        ultimaMencion = Date.now()
-        await sendText(silvina.respuesta())
+    else if (texto === '!tetas') {
+      // Si hay fotos en media/tetas/ manda una al azar; si no, Silvina gastandolos
+      const fs = require('fs'), path = require('path')
+      const dir = path.join(__dirname, 'media', 'tetas')
+      let fotos = []
+      try { fotos = fs.readdirSync(dir).filter(f => /\.(jpe?g|png)$/i.test(f)) } catch {}
+      if (fotos.length) {
+        const f = fotos[Math.floor(Math.random() * fotos.length)]
+        await sock.sendMessage(respondTo, {
+          image: fs.readFileSync(path.join(dir, f)),
+          caption: silvina.captionTetas(),
+          mimetype: f.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg',
+        })
+      } else {
+        await sendText(silvina.tetas(msg.pushName))
+      }
+    }
+    else if (!texto.startsWith('!') && (silvina.esMencion(texto) || esReplyAlBot(msg))) {
+      // La nombraron (silvina/sil/silvi/mi amor/hermosa...) o respondieron a un mensaje suyo
+      // → charla con ida y vuelta: hasta 3 turnos, después cierra y descansa 1 min
+      const ahora = Date.now()
+      const charlaActiva = charlaSilvina.turnos > 0 && ahora - charlaSilvina.ts < 120000
+      if (charlaActiva || ahora - charlaSilvina.fin > 60000) {
+        charlaSilvina.turnos = charlaActiva ? charlaSilvina.turnos + 1 : 1
+        charlaSilvina.ts = ahora
+        await sendText(silvina.charla(texto, charlaSilvina.turnos, msg.pushName))
+        if (charlaSilvina.turnos >= 3) charlaSilvina = { turnos: 0, ts: 0, fin: ahora }
       }
     }
     else if (testingMode) {
