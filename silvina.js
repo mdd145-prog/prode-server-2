@@ -28,6 +28,12 @@ const GASTADAS_EXACTO = [
   ns => `⚡ Resultado clavado de ${ns}. Me dan un poquito de miedo, no les voy a mentir.`,
   ns => `⚡ ${ns}... esa puntería conmigo no la tienen, eh 😏`,
   ns => `⚡ Exactazo de ${ns}. Bueno, alguien tenía que mirar fútbol en serio.`,
+  ns => `⚡ ${ns} la clavó. Más justo que eso, solo el promedio de Boca... y mirá que es bajo.`,
+  ns => `⚡ Exacto de ${ns}. Le pegó mejor que cualquier encuestadora en las PASO.`,
+  ns => `⚡ ${ns} embocó justo. Con esa puntería te quieren de candidato, cuidado.`,
+  ns => `⚡ ${ns} acertó. Esto está más arreglado que lista de candidatos en junio 👀`,
+  ns => `⚡ ${ns} la metió. Festejá ahora que, como gallina en el 2011, todo puede terminar mal.`,
+  ns => `⚡ Clavado de ${ns}. La única promesa que se cumplió en todo el país, felicitaciones.`,
 ]
 
 const NADIE_EXACTO = [
@@ -39,6 +45,11 @@ const NADIE_EXACTO = [
   `Nadie la clavó. Tranquilos, igual los quiero (a algunos).`,
   `Exactos: cero. Mis tarotistas amigas hubieran hecho un mejor papel.`,
   `Ningún exacto. ¿Esto es un prode o una rifa? No me queda claro.`,
+  `Cero exactos. Más errados que pronóstico de ministro de economía.`,
+  `Nadie la pegó. Este grupo falla más que promesa de campaña.`,
+  `Ningún exacto. Están todos para la B, gallinas y bosteros por igual.`,
+  `Cero. Le erraron todos juntos: una unidad nacional que emociona.`,
+  `Nadie acertó. Más perdido que oficialismo el lunes después de la elección.`,
 ]
 
 const SIN_PRONOSTICO = [
@@ -56,6 +67,10 @@ const LIDER = [
   p => `👑 *${p.nombre}* sigue arriba con ${p.tot}pts. Ya pidió que le digan "líder", me contaron.`,
   p => `👑 Punta para *${p.nombre}* (${p.tot}pts). Yo lo banco... hasta que se caiga, obvio.`,
   p => `👑 *${p.nombre}* con ${p.tot}pts mira a todos desde arriba. Qué paciencia hay que tenerle.`,
+  p => `👑 *${p.nombre}* puntero con ${p.tot}pts. Se cree River en los 90, pero esto recién empieza.`,
+  p => `👑 Manda *${p.nombre}* (${p.tot}pts). Disfrutá la cima, que del puntero al descenso hay un pasito.`,
+  p => `👑 *${p.nombre}* arriba con ${p.tot}pts. Más cómodo que oficialismo con superávit... por ahora.`,
+  p => `👑 *${p.nombre}* lidera (${p.tot}pts). Va ganando como en el primer tiempo del superclásico: total después se da vuelta.`,
 ]
 
 const CIERRES_FIN = [
@@ -65,6 +80,9 @@ const CIERRES_FIN = [
   `Los leo en el grupo. Yo de acá no me muevo 💅`,
   `No se peleen que hay Silvina para todos.`,
   `El VAR soy yo, y ya revisé todo.`,
+  `No se peleen por River y Boca, que en esta tabla son todos de la misma categoría 💅`,
+  `Yo no me meto en política ni en fútbol... mentira, me meto en todo 🍵`,
+  `Más vale puntito en mano que promesa de campaña, anótenlo.`,
   ``, ``, ``,  // a veces sin cierre, para no empalagar
 ]
 
@@ -76,6 +94,10 @@ const CAMBIO_LIDER = [
   (n, v) => `🚨 Cambio de mando: *${n}* arriba. ${v}, fue lindo mientras duró, ¿no?`,
   (n, v) => `🚨 *${n}* nuevo líder. ${v}, te guardo el trono... mentira, ya lo vendí.`,
   (n, v) => `🚨 Perdón ${v}, pero *${n}* te acaba de pasar por arriba. Yo solo leo los números 💅`,
+  (n, v) => `🚨 Se dio vuelta la tabla: *${n}* puntero. ${v} cayó más rápido que imagen de gobierno en crisis.`,
+  (n, v) => `🚨 *${n}* le pasó por arriba a ${v}. Esto fue un superclásico y ${v} puso cara de hinchada perdedora.`,
+  (n, v) => `🚨 Nuevo líder *${n}*. ${v}, te devaluaste en vivo. Lo lamento (no).`,
+  (n, v) => `🚨 *${n}* arriba, ${v} abajo. Te dieron vuelta la elección con el último voto, querido.`,
 ]
 
 // ── PREVIA DE PARTIDO ─────────────────────────────────────
@@ -104,6 +126,9 @@ const CAPTIONS_OFICIAL = [
   `📊 Tabla fresquita. Compartir con responsabilidad: hay gente sensible abajo.`,
   `📊 La tabla manda. Y la tabla la mando yo 💅`,
   `📊 Números actualizados. Las lágrimas corren por cuenta de cada uno.`,
+  `📊 La tabla. Más transparente que esto, ni la urna que nadie controla 💅`,
+  `📊 Acá no hay segunda vuelta ni recuento: los números mandan.`,
+  `📊 Tabla oficial. Gallinas arriba, bosteros abajo... o al revés, no me hago cargo 🍵`,
   ``,
 ]
 
@@ -130,6 +155,11 @@ const AMARGO = [
   n => `🥶 *${n}*, hoy mejor ni abras el grupo. Beso.`,
   n => `🥶 *${n}*: cero puntos hoy. Un abrazo enorme, lo vas a necesitar.`,
   n => `🥶 Hoy *${n}* jugó al prode como yo al truco: de memoria y mal.`,
+  n => `🥶 *${n}* hoy hizo agua. Más rojo que el riesgo país.`,
+  n => `🥶 *${n}*, cero puntos. Caída libre, peor que cuadro chico en la tabla del descenso.`,
+  n => `🥶 *${n}* otra vez último. Prometés mucho y cumplís poco: te falta ser candidato nomás.`,
+  n => `🥶 *${n}*, si tu prode fuera equipo, ya jugaría la Promoción. Beso, gallina.`,
+  n => `🥶 *${n}* sumó cero. Más vacío que cancha de Boca... ay, perdón, esa era de River. Da igual, perdiste.`,
 ]
 
 // ── RECLAMO DE PRONÓSTICOS (modo seductora) ───────────────
@@ -175,6 +205,14 @@ const COQUETAS = [
   n => `Seguime endulzando el oído, ${n}, que puntos igual no te puedo regalar 💅`,
   n => `Ay no, ${n}, esas cosas en público no... mandámelas al privado 😏 (mentira, acá, donde las vean todos).`,
   n => `${n}, papito, vos me decís eso porque vas perdiendo. Igual funciona, seguí 💋`,
+  n => `${n}, papito, vos lo único que sabés levantar es de a un punto. A mí, ni lo intentes 😘`,
+  n => `Tranquilo ${n}, que se la quieren levantar muchos y todavía no nació el que pueda 💋`,
+  n => `Mirá ${n}, levante te doy en la tabla: 1 puntito. Lo otro, ni en tus sueños 😏`,
+  n => `Ay, otro que se quiere levantar a Silvina... ${n}, hacé fila atrás de todo el grupo, corazón 💅`,
+  n => `${n}, mejor levantá pronósticos, que a mí no me levantás ni con VAR 😘`,
+  n => `${n}, me halagás más que candidato pidiendo el voto. Y yo, como buena política, no prometo nada 💅`,
+  n => `${n}, te anoto en la fila de los que me tiran onda. Larguita la fila, eh... y lenta 😏`,
+  n => `Sos más insistente que hinchada pidiendo refuerzos, ${n}. Igual no te regalo ni medio punto 😘`,
 ]
 
 // Turno 1 — la cargaron o insultaron
@@ -186,6 +224,10 @@ const COMEBACKS = [
   n => `¿Y ese carácter, ${n}? El que se enoja pierde. Bah, vos ya venís perdiendo igual.`,
   n => `${n}, mi amor, insultame todo lo que quieras: yo igual sé TODO de vos 👀`,
   n => `Qué genio, ${n}. Suerte que soy una dama... y que guardo capturas.`,
+  n => `${n} me trata mal y va último: la grieta interna te la armaste solo, papi 😏`,
+  n => `${n}, a mí no me corrés con el carácter. Tengo más aguante que hinchada en la B.`,
+  n => `Seguí gritando, ${n}, que de los que protestan mucho y rinden poco está lleno: la política y tu prode.`,
+  n => `${n}, primero me querías levantar y ahora me puteás. Más vueltas que diputado en junio, vos.`,
 ]
 
 // Turno 1 — saludo / mención genérica
@@ -199,6 +241,10 @@ const CHISMOSAS = [
   n => `Aparecí, ${n}. Como los buenos chismes: justo cuando nadie me esperaba.`,
   n => `¿Qué pasa, ${n}? ¿Necesitás algo o es pura falta de atención? Cualquiera de las dos me sirve 😘`,
   n => `Hola hermoso. Si es por la tabla: !tabla. Si es por mí: estoy ocupada hasta julio 😘`,
+  n => `¿Me llamabas, ${n}? Estaba arreglando la tabla... mentira, eso lo hacen en otros lados 👀`,
+  n => `Hola ${n}. ¿Venís a hablar de fútbol, de política o a perder en las dos? 🍵`,
+  n => `Acá estoy, ${n}. Neutral como árbitro de River-Boca... o sea, nada neutral 😏`,
+  n => `¿Otro que aparece a tirarme onda, ${n}? Sacá número y esperá, que hay demanda 💅`,
 ]
 
 // Turno 2 — sigue la conversación
@@ -211,6 +257,9 @@ const SEGUNDAS = [
   n => `¿Y eso lo decís en el grupo, ${n}? Picante. Me gusta 💅`,
   n => `Dale, ${n}, una más y te dejo, que después dicen que tengo favoritos. (Los tengo.)`,
   n => `Vos seguí, ${n}, que yo tomo nota de todo. Después no digas que no avisé 👀`,
+  n => `Seguí ${n}, que esto está más picante que sobremesa familiar en elecciones 🍵`,
+  n => `Ay ${n}, te la pasás tirándome onda y la tabla sin completar. Ordená prioridades, amor 😏`,
+  n => `Vos me querés levantar, ${n}, y todavía no levantaste ni un partido. Empecemos por ahí 💅`,
 ]
 
 // Turno 3 — cierra la charla y vuelve al laburo
@@ -221,6 +270,9 @@ const DESPEDIDAS = [
   n => `Ya está, ${n}, no me des más charla que me distraigo y se me escapa un resultado. Silvina fuera 💅`,
   n => `Listo, listo, me voy antes de decir algo de lo que el grupo hable una semana. Chau ${n} 💋`,
   n => `Hasta acá llegamos, ${n}. Una dama sabe cuándo retirarse... y cuándo volver 😏`,
+  n => `Listo ${n}, corto antes de que esto se vuelva un River-Boca y termine mal 💋`,
+  n => `Me voy ${n}, que de prometer y no cumplir ya se encargan otros. Silvina cumple y se retira 😘`,
+  n => `Chau ${n}, seguí intentando levantarme que es gratis... y eterno 💅`,
 ]
 
 // ── FOTO DE SILVINA ───────────────────────────────────────
