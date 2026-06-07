@@ -332,6 +332,21 @@ module.exports = {
     return lines.join('\n')
   },
 
+  // Anuncio puntual de las 3 formas de cargar + edición (se dispara con !novedades)
+  novedades: url => [
+    '💋 *Silvina, al habla, mis amores.*',
+    '',
+    'Escúchenme bien que lo digo una sola vez: ahora cargás el prode *como quieras, papito*. El código de siempre, *directo a la web sin vueltas*, o bajándote un *Excel*, llenándolo tranqui en la compu y subiéndolo. Tres formas. Para tres tipos de vago. 😏',
+    '',
+    '¿Te equivocaste en un resultado? Tranqui, corazón, yo también me arrepiento de cosas. Pegás tu código de nuevo, lo editás y lo mandás — *y no se duplica nada*, te reconozco por el nombre aunque entres desde otro celu.',
+    '',
+    'Y lo que *nadie* ve son los pronósticos del otro. Acá se chusmea solo lo MÍO, queridas. 🔥',
+    '',
+    `A cargar que el Mundial no espera 👉 ${url}`,
+    '',
+    'Besito. 💋',
+  ].join('\n'),
+
   resumenNocturno: (fecha, partidosDia, stats) => {
     const f = new Date(fecha + 'T12:00:00').toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })
     const lines = [pick(INTROS_NOCTURNO)(f), '']

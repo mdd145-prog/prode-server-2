@@ -301,6 +301,11 @@ async function handleMessage(sock, msg) {
       await enviarImagenAlGrupo(img, '')
       if (isPrivateAdmin) await sendText('✅ Tabla enviada al grupo')
     }
+    else if (senderIsAdmin && texto === '!novedades') {
+      if (!groupId) { await sendText('❌ GROUP_ID no configurado'); return }
+      await enviarAlGrupo(silvina.novedades(WEB_URL))
+      if (isPrivateAdmin) await sendText('✅ Novedades enviadas al grupo')
+    }
     else if (senderIsAdmin && texto === '!sync') {
       await sendText('🔄 Sincronizando...')
       await verificarPartidosEnVivo(true)
