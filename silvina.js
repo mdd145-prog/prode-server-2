@@ -171,6 +171,10 @@ const INTROS_RECLAMO = [
   `😏 Buen día... ¿saben qué me desvela? La gente que promete y no cumple. Sí, hablo de pronósticos. Sí, hablo de ustedes.`,
   `🔥 Me levanté linda y reclamona: todavía hay vivos que no me dieron sus 72. ¿Hasta cuándo me van a hacer esto?`,
   `💋 Buen día mis cielos. Silvina perdona casi todo, menos un prode incompleto...`,
+  `🔥 Buen día mis amores. Hay más gente debiéndome pronósticos que promesas sin cumplir en este país... y miren que es decir. Pónganse al día 😏`,
+  `😏 Buen día. Me desperté pensando: ¿cómo puede ser que tantos me quieran levantar y tan pocos me hayan dado sus 72? Empecemos por lo importante, corazones.`,
+  `💋 Buen día. Esto está más trabado que River y Boca sin definir nada: varios todavía sin pronosticar. No me hagan renegar tan temprano.`,
+  `🔥 Día nuevo. A los que me tiran onda todo el día pero no completan el prode: el levante de verdad es mandarme los 72, papitos 😘`,
 ]
 const CIERRES_RECLAMO = [
   url => `Completalo acá que es un ratito, y después hablamos... 😘\n${url}`,
@@ -178,12 +182,18 @@ const CIERRES_RECLAMO = [
   url => `Ya sabés dónde encontrarme, no me falles esta noche...\n${url}`,
   url => `Dale, que en cinco minutitos lo tenés listo y me hacés feliz 😘\n${url}`,
   url => `Acá te espero, no me dejes plantada otra vez...\n${url}`,
+  url => `Dale, completámelo y después me seguís chamuyando, que me gusta el ida y vuelta 😏\n${url}`,
+  url => `Más rápido que candidato cambiando de bando, lo tenés listo. Te espero acá 💋\n${url}`,
+  url => `El único levante que te acepto hoy es que completes los 72. Manos a la obra 😘\n${url}`,
 ]
 const PIROPOS_CUMPLIDORES = [
   ns => `Y a los que ya me dieron todo (${ns})... ustedes ya saben que son mis favoritos 😘`,
   ns => `${ns}: ustedes ya cumplieron. Lo que es ser caballeros... los demás, aprendan.`,
   ns => `Mención especial para ${ns}, que me dieron sus 72 sin chistar. Eso, señores, enamora.`,
   ns => `Eso sí: ${ns} ya me dieron todo. Con ustedes no tengo más que palabras de amor 💋`,
+  ns => `Y mis cumplidores ${ns}: ustedes sí saben levantar... pronósticos y mi humor. Los amo 💋`,
+  ns => `${ns} ya cumplieron. En un país de promesas vacías, ustedes entregaron. Eso es ser grande 😘`,
+  ns => `${ns}: jugaron limpio y completo. Ni River ni Boca, ustedes son de mi cuadro 💅`,
 ]
 
 // ── CHARLA: cuando la nombran ─────────────────────────────
@@ -299,6 +309,12 @@ const TETAS = [
   n => `Uy, ${n} pidió !tetas y quedó registrado para siempre. El chisme se hace solo 👀`,
   n => `¿!tetas? Las mías valen más que el pozo del prode, ${n}. No te alcanza 💋`,
   n => `${n}, amor, primero invitame a salir, después un asadito... hay un orden, ¿sí? 😘`,
+  n => `${n}, vos querés ver tetas y todavía no levantaste ni un partido. Prioridades, rey 😏`,
+  n => `Ay ${n}... más fácil que River y Boca jueguen juntos en la B que vos me veas algo. Ganá primero 💅`,
+  n => `${n}, esto no es promesa de campaña: acá nada es gratis. !tabla y a laburar 😘`,
+  n => `Querido ${n}, lo mío no se reparte como subsidio. Se gana. Y vos vas último 💋`,
+  n => `${n} pidiendo !tetas con el prode incompleto... el populismo en su máxima expresión 😏`,
+  n => `Tantos que se la quieren levantar a Silvina, ¿y vos creés que con un "!tetas" alcanza, ${n}? Tierno.`,
 ]
 
 // Caption cuando SÍ hay foto en media/tetas/:
