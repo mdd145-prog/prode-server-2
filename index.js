@@ -16,6 +16,24 @@ app.use(express.json())
 // ── Clientes ──────────────────────────────────────────────
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY)
 
+// Trae TODOS los pronósticos paginando — PostgREST corta en 1000 filas por request,
+// y con N jugadores × 72 partidos eso se desborda y se pierden los del final.
+async function fetchAllPronosticos(select = '*') {
+  const PAGE = 1000
+  const out = []
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from('pronosticos')
+      .select(select)
+      .range(from, from + PAGE - 1)
+    if (error) throw error
+    if (!data?.length) break
+    out.push(...data)
+    if (data.length < PAGE) break
+  }
+  return out
+}
+
 // ── Constantes ────────────────────────────────────────────
 const ADMIN_NUMBER = '5491157671081'
 const ADMIN_JID    = process.env.ADMIN_JID || `${ADMIN_NUMBER}@s.whatsapp.net`  // Baileys usa @s.whatsapp.net
@@ -67,7 +85,7 @@ function calcPts(pred, partido) {
 async function buildBoard() {
   const { data: jugadores }   = await supabase.from('jugadores').select('*').order('orden')
   const { data: partidos }    = await supabase.from('partidos').select('*')
-  const { data: pronosticos } = await supabase.from('pronosticos').select('*')
+  const pronosticos = await fetchAllPronosticos()
   if (!jugadores) return []
   return jugadores.map(j => {
     let tot = 0, ex = 0, lv = 0, fail = 0, jug = 0
@@ -104,7 +122,7 @@ async function tablaDiaTexto(fecha) {
   const { data: partidos }    = await supabase.from('partidos').select('*').eq('fecha', fecha)
   if (!partidos?.length) return `No hay partidos el ${fecha}`
   const { data: jugadores }   = await supabase.from('jugadores').select('*').order('orden')
-  const { data: pronosticos } = await supabase.from('pronosticos').select('*')
+  const pronosticos = await fetchAllPronosticos()
   const lines = [`📅 *PARTIDOS ${fecha}*`, ``]
   for (const p of partidos) {
     const res = p.goles1 !== null ? `${p.goles1}-${p.goles2}` : p.hora
@@ -136,7 +154,7 @@ function rachaExactos(jugadorId, partidos, pronosticos) {
 async function mensajeFinPartido(partido) {
   const { data: jugadores }   = await supabase.from('jugadores').select('*').order('orden')
   const { data: partidos }    = await supabase.from('partidos').select('*')
-  const { data: pronosticos } = await supabase.from('pronosticos').select('*')
+  const pronosticos = await fetchAllPronosticos()
   const resTxt = `*${partido.equipo1} ${partido.goles1}-${partido.goles2} ${partido.equipo2}*`
 
   const filas = [], exactos = [], sinPron = []
@@ -237,7 +255,7 @@ async function handleMessage(sock, msg) {
       const { data: pHoy }  = await supabase.from('partidos').select('*').eq('fecha', hoy)
       if (!pHoy?.length) { await sendText(`No hay partidos hoy (${hoy})`); return }
       const { data: jugs }  = await supabase.from('jugadores').select('*').order('orden')
-      const { data: preds } = await supabase.from('pronosticos').select('*')
+      const preds = await fetchAllPronosticos()
       const img = await generarImagenDia(pHoy, jugs || [], preds || [], hoy)
       await sendImage(img, '')
     }
@@ -246,7 +264,7 @@ async function handleMessage(sock, msg) {
       const { data: pFecha } = await supabase.from('partidos').select('*').eq('fecha', fecha)
       if (!pFecha?.length) { await sendText(`No hay partidos el ${fecha}`); return }
       const { data: jugs }  = await supabase.from('jugadores').select('*').order('orden')
-      const { data: preds } = await supabase.from('pronosticos').select('*')
+      const preds = await fetchAllPronosticos()
       const img = await generarImagenDia(pFecha, jugs || [], preds || [], fecha)
       await sendImage(img, '')
     }
@@ -288,7 +306,7 @@ async function handleMessage(sock, msg) {
       const { data: pHoy }  = await supabase.from('partidos').select('*').eq('fecha', hoy)
       if (!pHoy?.length) { await sendText(`No hay partidos hoy (${hoy})`); return }
       const { data: jugs }  = await supabase.from('jugadores').select('*').order('orden')
-      const { data: preds } = await supabase.from('pronosticos').select('*')
+      const preds = await fetchAllPronosticos()
       const img = await generarImagenDia(pHoy, jugs || [], preds || [], hoy)
       await enviarImagenAlGrupo(img, '')
       if (isPrivateAdmin) await sendText('✅ Resumen enviado al grupo')
@@ -446,7 +464,7 @@ async function calcProbaBoard() {
   const [board, oddsData] = await Promise.all([buildBoard(), getOdds()])
   const { data: partidos }    = await supabase.from('partidos').select('*')
   const { data: jugadores }   = await supabase.from('jugadores').select('*').order('orden')
-  const { data: pronosticos } = await supabase.from('pronosticos').select('*')
+  const pronosticos = await fetchAllPronosticos()
   if (!jugadores?.length) return null
 
   const oddsMap  = buildOddsMap(oddsData, partidos)
@@ -634,7 +652,7 @@ cron.schedule('*/5 * * * *', async () => {
     if (!proximos.length) return
     proximos.forEach(p => previaAnunciada.add(p.id))
     const { data: jugadores }   = await supabase.from('jugadores').select('*').order('orden')
-    const { data: pronosticos } = await supabase.from('pronosticos').select('*')
+    const pronosticos = await fetchAllPronosticos()
     await enviarAlGrupo(arnaldo.previa(proximos, jugadores || [], pronosticos || []))
     console.log(`🍿 Previa enviada: ${proximos.map(p => p.equipo1 + '-' + p.equipo2).join(', ')}`)
   } catch (e) { console.error('Error previa:', e.message) }
@@ -647,7 +665,7 @@ cron.schedule('0 13 * * *', async () => {
   try {
     if (hoyARG() > '2026-06-27') return  // termina con la fase de grupos
     const { data: jugadores }   = await supabase.from('jugadores').select('*').order('orden')
-    const { data: pronosticos } = await supabase.from('pronosticos').select('jugador_id,goles1')
+    const pronosticos = await fetchAllPronosticos('jugador_id,goles1')
     if (!jugadores?.length) return
     const conteo = j => (pronosticos || []).filter(p => p.jugador_id === j.id && p.goles1 !== null).length
     const sinNada = [], incompletos = [], completos = []
@@ -671,7 +689,7 @@ cron.schedule('30 4 * * *', async () => {
     const delDia = (partidos || []).filter(p => p.fecha === ayer && p.goles1 !== null)
     if (!delDia.length) return
     const { data: jugadores }   = await supabase.from('jugadores').select('*').order('orden')
-    const { data: pronosticos } = await supabase.from('pronosticos').select('*')
+    const pronosticos = await fetchAllPronosticos()
     const stats = (jugadores || []).map(j => {
       let pts = 0, ex = 0, fail = 0
       for (const p of delDia) {
@@ -694,7 +712,7 @@ cron.schedule('0 11 * * *', async () => {
     if (!partidos || partidos.length === 0) return
     console.log('Enviando resumen del dia:', hoy)
     const { data: jugs }  = await supabase.from('jugadores').select('*').order('orden')
-    const { data: preds } = await supabase.from('pronosticos').select('*')
+    const preds = await fetchAllPronosticos()
     const img = await generarImagenDia(partidos, jugs || [], preds || [], hoy)
     await enviarImagenAlGrupo(img, arnaldo.captionDia())
   } catch(e) { console.error('Error cron 8am:', e.message) }
@@ -860,7 +878,7 @@ app.get('/preview/dia', async (req, res) => {
     const { data: pHoy }  = await supabase.from('partidos').select('*').eq('fecha', fecha)
     if (!pHoy?.length) return res.send(`No hay partidos el ${fecha}`)
     const { data: jugs }  = await supabase.from('jugadores').select('*').order('orden')
-    const { data: preds } = await supabase.from('pronosticos').select('*')
+    const preds = await fetchAllPronosticos()
     const img = await generarImagenDia(pHoy, jugs || [], preds || [], fecha)
     res.setHeader('Content-Type', 'image/png')
     res.send(img)
