@@ -8,7 +8,7 @@ const cron = require('node-cron')
 const { createClient } = require('@supabase/supabase-js')
 const axios = require('axios')
 const { generarTablaImagen, generarImagenDia, generarTablaProba, generarTablaChances } = require('./tablaImagen')
-const silvina = require('./silvina')
+const arnaldo = require('./arnaldo')
 
 const app = express()
 app.use(express.json())
@@ -53,7 +53,7 @@ const hoyARG = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America
 // ── Estado global ─────────────────────────────────────────
 let botSock  = null
 let ultimoQR = null
-let charlaSilvina = { turnos: 0, ts: 0, fin: 0 }  // ida y vuelta con Silvina (máx. 3 turnos, ventana 2 min)
+let charlaArnaldo = { turnos: 0, ts: 0, fin: 0 }  // ida y vuelta con Arnaldo (máx. 3 turnos, ventana 2 min)
 
 // ── Lógica de puntos ──────────────────────────────────────
 function calcPts(pred, partido) {
@@ -150,21 +150,21 @@ async function mensajeFinPartido(partido) {
   }
   filas.sort((a, b) => b.pts - a.pts)
 
-  const lines = [silvina.introFin(resTxt), '', ...filas.map(f => f.line)]
-  if (sinPron.length) lines.push(silvina.sinPronostico(sinPron))
-  lines.push('', exactos.length ? silvina.gastadaExactos(exactos) : silvina.nadieExacto())
+  const lines = [arnaldo.introFin(resTxt), '', ...filas.map(f => f.line)]
+  if (sinPron.length) lines.push(arnaldo.sinPronostico(sinPron))
+  lines.push('', exactos.length ? arnaldo.gastadaExactos(exactos) : arnaldo.nadieExacto())
 
   // rachas de exactos (2 o más al hilo)
   const partidosAct = (partidos || []).map(p => p.id === partido.id ? { ...p, goles1: partido.goles1, goles2: partido.goles2 } : p)
   for (const nombre of exactos) {
     const j = jugadores.find(x => x.nombre === nombre)
     const r = rachaExactos(j.id, partidosAct, pronosticos || [])
-    if (r >= 2) lines.push(silvina.racha(nombre, r))
+    if (r >= 2) lines.push(arnaldo.racha(nombre, r))
   }
 
   const board = await buildBoard()
-  if (board[0] && board[0].tot > 0) lines.push(silvina.lider(board[0]))
-  const cierre = silvina.cierreFin()
+  if (board[0] && board[0].tot > 0) lines.push(arnaldo.lider(board[0]))
+  const cierre = arnaldo.cierreFin()
   if (cierre) lines.push('', cierre)
   return lines.join('\n')
 }
@@ -182,7 +182,7 @@ async function enviarImagenAlGrupo(buffer, caption) {
   await botSock.sendMessage(g, { image: buffer, caption, mimetype: 'image/png' })
 }
 
-// ¿El mensaje es una respuesta (quote) a un mensaje del bot? → Silvina sigue la charla
+// ¿El mensaje es una respuesta (quote) a un mensaje del bot? → Arnaldo sigue la charla
 function esReplyAlBot(msg) {
   const quotedJid = msg.message?.extendedTextMessage?.contextInfo?.participant
   const botJid = botSock?.user?.id
@@ -266,7 +266,6 @@ async function handleMessage(sock, msg) {
         `!hoy → Partidos de hoy + pronósticos\n` +
         `!dia YYYY-MM-DD → Partidos de una fecha\n` +
         `!chances → Quién sigue en carrera\n` +
-        `!tetas → Probá y vas a ver 😏\n` +
         `!ayuda → Este mensaje`
       )
     }
@@ -303,7 +302,7 @@ async function handleMessage(sock, msg) {
     }
     else if (senderIsAdmin && texto === '!novedades') {
       if (!groupId) { await sendText('❌ GROUP_ID no configurado'); return }
-      await enviarAlGrupo(silvina.novedades(WEB_URL))
+      await enviarAlGrupo(arnaldo.novedades(WEB_URL))
       if (isPrivateAdmin) await sendText('✅ Novedades enviadas al grupo')
     }
     else if (senderIsAdmin && texto === '!sync') {
@@ -322,40 +321,16 @@ async function handleMessage(sock, msg) {
         `GROUP_ID: ${groupId || '❌ NO CONFIGURADO'}\nAPI fútbol: ${process.env.FOOTBALL_API_KEY ? '✅' : '❌'}`
       )
     }
-    else if (texto === '!tetas') {
-      // Si hay fotos en media/tetas/ manda una al azar; si no, Silvina gastandolos
-      const fs = require('fs'), path = require('path')
-      const dir = path.join(__dirname, 'media', 'tetas')
-      let fotos = []
-      try { fotos = fs.readdirSync(dir).filter(f => /\.(jpe?g|png)$/i.test(f)) } catch {}
-      if (fotos.length) {
-        const f = fotos[Math.floor(Math.random() * fotos.length)]
-        await sock.sendMessage(respondTo, {
-          image: fs.readFileSync(path.join(dir, f)),
-          caption: silvina.captionTetas(),
-          mimetype: f.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg',
-        })
-      } else {
-        await sendText(silvina.tetas(msg.pushName))
-      }
-    }
-    else if (!texto.startsWith('!') && (silvina.esMencion(texto) || esReplyAlBot(msg))) {
-      // La nombraron (silvina/sil/silvi/mi amor/hermosa...) o respondieron a un mensaje suyo
-      // → charla con ida y vuelta: hasta 3 turnos, después cierra y descansa 1 min
+    else if (!texto.startsWith('!') && (arnaldo.esMencion(texto) || esReplyAlBot(msg))) {
+      // Lo nombraron (arnaldo/don arnaldo/...) o respondieron a un mensaje suyo
+      // → charla cortés con ida y vuelta: hasta 3 turnos, después cierra y descansa 1 min
       const ahora = Date.now()
-      const charlaActiva = charlaSilvina.turnos > 0 && ahora - charlaSilvina.ts < 120000
-      if (charlaActiva || ahora - charlaSilvina.fin > 60000) {
-        charlaSilvina.turnos = charlaActiva ? charlaSilvina.turnos + 1 : 1
-        charlaSilvina.ts = ahora
-        const fs = require('fs'), path = require('path')
-        const fotoSilvina = path.join(__dirname, 'media', 'silvina.jpg')
-        if (silvina.pideFoto(texto) && fs.existsSync(fotoSilvina)) {
-          // Le pidieron una foto de ella → manda su foto con caption coqueto
-          await sock.sendMessage(respondTo, { image: fs.readFileSync(fotoSilvina), caption: silvina.captionFoto(), mimetype: 'image/jpeg' })
-        } else {
-          await sendText(silvina.charla(texto, charlaSilvina.turnos, msg.pushName))
-        }
-        if (charlaSilvina.turnos >= 3) charlaSilvina = { turnos: 0, ts: 0, fin: ahora }
+      const charlaActiva = charlaArnaldo.turnos > 0 && ahora - charlaArnaldo.ts < 120000
+      if (charlaActiva || ahora - charlaArnaldo.fin > 60000) {
+        charlaArnaldo.turnos = charlaActiva ? charlaArnaldo.turnos + 1 : 1
+        charlaArnaldo.ts = ahora
+        await sendText(arnaldo.charla(texto, charlaArnaldo.turnos, msg.pushName))
+        if (charlaArnaldo.turnos >= 3) charlaArnaldo = { turnos: 0, ts: 0, fin: ahora }
       }
     }
     else if (testingMode) {
@@ -405,7 +380,7 @@ async function handleResultadoManual(sock, texto, respondTo) {
       try {
         const board = await buildBoard()
         const img   = await generarTablaImagen(board, 'oficial')
-        await enviarImagenAlGrupo(img, silvina.captionOficial())
+        await enviarImagenAlGrupo(img, arnaldo.captionOficial())
       } catch(e) { console.error(e.message) }
     }, 3000)
   }
@@ -606,7 +581,7 @@ async function verificarPartidosEnVivo(forzar = false) {
           try {
             const board = await buildBoard()
             const img   = await generarTablaImagen(board, 'oficial')
-            await enviarImagenAlGrupo(img, silvina.captionOficial())
+            await enviarImagenAlGrupo(img, arnaldo.captionOficial())
           } catch(e) { console.error(e.message) }
         }, 3000)
       }
@@ -618,7 +593,7 @@ async function verificarPartidosEnVivo(forzar = false) {
       if (board.length > 1 && board[0].tot > board[1].tot) {
         const punta = board[0].nombre
         if (liderActual && punta !== liderActual) {
-          await enviarAlGrupo(silvina.cambioLider(punta, liderActual))
+          await enviarAlGrupo(arnaldo.cambioLider(punta, liderActual))
           console.log(`👑 Cambio de líder: ${liderActual} → ${punta}`)
         }
         liderActual = punta
@@ -635,7 +610,7 @@ cron.schedule('*/2 * * * *', async () => {
   await verificarPartidosEnVivo()
 })
 
-// Previa: 15 min antes de cada partido, Silvina cuenta qué pronosticó cada uno
+// Previa: 15 min antes de cada partido, Arnaldo comparte qué pronosticó cada uno
 const previaAnunciada = new Set()
 const ahoraARGmin = () => {
   const s = new Date().toLocaleTimeString('en-GB', { timeZone: 'America/Argentina/Buenos_Aires', hour12: false })
@@ -660,13 +635,13 @@ cron.schedule('*/5 * * * *', async () => {
     proximos.forEach(p => previaAnunciada.add(p.id))
     const { data: jugadores }   = await supabase.from('jugadores').select('*').order('orden')
     const { data: pronosticos } = await supabase.from('pronosticos').select('*')
-    await enviarAlGrupo(silvina.previa(proximos, jugadores || [], pronosticos || []))
+    await enviarAlGrupo(arnaldo.previa(proximos, jugadores || [], pronosticos || []))
     console.log(`🍿 Previa enviada: ${proximos.map(p => p.equipo1 + '-' + p.equipo2).join(', ')}`)
   } catch (e) { console.error('Error previa:', e.message) }
 })
 
 // Reclamo de pronósticos — 10:00 ARG (13:00 UTC), todos los días hasta el fin de grupos.
-// Silvina seduce a los que no completaron sus 72.
+// Arnaldo recuerda cordialmente a los que no completaron sus 72.
 const WEB_URL = 'https://mdd145-prog.github.io/Prode-Mundial-2026-LVM/'
 cron.schedule('0 13 * * *', async () => {
   try {
@@ -682,13 +657,13 @@ cron.schedule('0 13 * * *', async () => {
       else if (done < 72) incompletos.push({ nombre: j.nombre, done })
       else completos.push(j.nombre)
     }
-    if (!sinNada.length && !incompletos.length) return  // todos cumplieron, Silvina descansa
-    await enviarAlGrupo(silvina.reclamo(sinNada, incompletos, completos, WEB_URL))
+    if (!sinNada.length && !incompletos.length) return  // todos cumplieron, Arnaldo descansa
+    await enviarAlGrupo(arnaldo.reclamo(sinNada, incompletos, completos, WEB_URL))
     console.log(`💋 Reclamo enviado: ${sinNada.length} sin nada, ${incompletos.length} a medias`)
   } catch (e) { console.error('Error reclamo:', e.message) }
 })
 
-// Resumen nocturno de Silvina — 01:30 ARG (04:30 UTC), cierra el día anterior
+// Resumen nocturno de Arnaldo — 01:30 ARG (04:30 UTC), cierra el día anterior
 cron.schedule('30 4 * * *', async () => {
   try {
     const ayer = new Date(Date.now() - 24 * 3600e3).toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
@@ -706,7 +681,7 @@ cron.schedule('30 4 * * *', async () => {
       }
       return { nombre: j.nombre, pts, ex, fail }
     }).sort((a, b) => b.pts - a.pts)
-    await enviarAlGrupo(silvina.resumenNocturno(ayer, delDia, stats))
+    await enviarAlGrupo(arnaldo.resumenNocturno(ayer, delDia, stats))
     console.log('🌙 Resumen nocturno enviado:', ayer)
   } catch (e) { console.error('Error resumen nocturno:', e.message) }
 })
@@ -721,7 +696,7 @@ cron.schedule('0 11 * * *', async () => {
     const { data: jugs }  = await supabase.from('jugadores').select('*').order('orden')
     const { data: preds } = await supabase.from('pronosticos').select('*')
     const img = await generarImagenDia(partidos, jugs || [], preds || [], hoy)
-    await enviarImagenAlGrupo(img, silvina.captionDia())
+    await enviarImagenAlGrupo(img, arnaldo.captionDia())
   } catch(e) { console.error('Error cron 8am:', e.message) }
 })
 
