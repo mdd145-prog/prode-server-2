@@ -58,18 +58,11 @@ const CAMBIO_LIDER = [
   (n, v) => `🚨 *${n}* asume el liderazgo de la tabla. Felicitaciones por el desempeño.`,
 ]
 
-// ── PREVIA DE PARTIDO ─────────────────────────────────────
-const INTROS_PREVIA = [
-  `📋 *Previa del próximo partido* — pronósticos cargados:`,
-  `⏰ En unos minutos arranca. Estos son los pronósticos del grupo:`,
-  `📝 Antes del pitazo inicial, repasamos lo que pronosticó cada uno:`,
-  `⚽ Ya casi arranca. Comparto los pronósticos cargados:`,
-]
-
-const PREVIA_NADIE = [
-  `(este partido no tiene pronósticos cargados)`,
-  `(nadie pronosticó este encuentro)`,
-  `(sin pronósticos para este partido)`,
+// ── ANÁLISIS PREVIO (20 min antes de cada partido) ────────
+const INTROS_ANALISIS = [
+  p => `⏰ En 20 minutos arranca *${p.equipo1} vs ${p.equipo2}*`,
+  p => `⏰ En unos minutos arranca *${p.equipo1} vs ${p.equipo2}*`,
+  p => `⚽ Ya casi arranca *${p.equipo1} vs ${p.equipo2}*`,
 ]
 
 // ── CAPTIONS DE IMÁGENES ──────────────────────────────────
@@ -81,12 +74,7 @@ const CAPTIONS_OFICIAL = [
   ``,
 ]
 
-const CAPTIONS_DIA = [
-  `☀️ Buen día. Estos son los partidos de hoy y los pronósticos cargados:`,
-  `☀️ Buenos días. Comparto el resumen del día:`,
-  `☀️ Buen día para todos. Hoy se juegan estos partidos:`,
-  `☀️ Buenos días. A continuación, los partidos de hoy:`,
-]
+const CAPTIONS_DIA = [`*Partidos del Día*`]
 
 // ── RESUMEN NOCTURNO ──────────────────────────────────────
 const INTROS_NOCTURNO = [
@@ -180,18 +168,19 @@ module.exports = {
 
   racha: (nombre, n) => `🔥 *${nombre}* lleva ${n} exactos al hilo. Excelente racha.`,
 
-  previa: (partidos, jugadores, pronosticos) => {
-    const lines = [pick(INTROS_PREVIA), '']
-    for (const p of partidos) {
-      lines.push(`⚽ *${p.equipo1} vs ${p.equipo2}* — ${p.hora}hs`)
-      const preds = jugadores
-        .map(j => ({ j, pr: pronosticos.find(x => x.jugador_id === j.id && x.partido_id === p.id) }))
-        .filter(x => x.pr && x.pr.goles1 !== null)
-        .map(x => `${x.j.nombre} ${x.pr.goles1}-${x.pr.goles2}`)
-      lines.push(preds.length ? '  ' + preds.join(' · ') : '  ' + pick(PREVIA_NADIE))
-      lines.push('')
+  analisisPartido: (partido, jugadores, pronosticos) => {
+    const grupos = {}
+    for (const j of jugadores) {
+      const pr = pronosticos.find(x => x.jugador_id === j.id && x.partido_id === partido.id)
+      if (!pr || pr.goles1 === null) continue
+      const key = `${pr.goles1}-${pr.goles2}`
+      if (!grupos[key]) grupos[key] = []
+      grupos[key].push(j.nombre)
     }
-    return lines.join('\n').trim()
+    const ordenados = Object.entries(grupos).sort((a, b) => b[1].length - a[1].length)
+    const lines = [pick(INTROS_ANALISIS)(partido), '', '📋 Pronósticos cargados:']
+    for (const [marcador, nombres] of ordenados) lines.push(`*${marcador}* → ${nombres.join(', ')}`)
+    return lines.join('\n')
   },
 
   captionOficial: () => pick(CAPTIONS_OFICIAL),

@@ -628,34 +628,42 @@ cron.schedule('*/2 * * * *', async () => {
   await verificarPartidosEnVivo()
 })
 
-// Previa: 15 min antes de cada partido, Arnaldo comparte qué pronosticó cada uno
-const previaAnunciada = new Set()
+// Análisis previo: 20 min antes de cada partido, Arnaldo manda los pronósticos agrupados por marcador.
+// Incluye partidos de mañana (00:00 ARG cuenta como "mañana" en la DB).
+const analisisAnunciado = new Set()
 const ahoraARGmin = () => {
   const s = new Date().toLocaleTimeString('en-GB', { timeZone: 'America/Argentina/Buenos_Aires', hour12: false })
   const [h, m] = s.split(':')
   return parseInt(h) * 60 + parseInt(m)
 }
+const mananaARG = () => {
+  const ms = Date.now() + 24 * 3600 * 1000
+  return new Date(ms).toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
+}
 
 cron.schedule('*/5 * * * *', async () => {
   try {
     if (!process.env.GROUP_ID || !botSock) return
-    const hoy = hoyARG()
-    const { data: pHoy } = await supabase.from('partidos').select('*').eq('fecha', hoy).is('goles1', null)
-    if (!pHoy?.length) return
+    const hoy = hoyARG(), manana = mananaARG()
+    const { data: partidos } = await supabase.from('partidos').select('*').in('fecha', [hoy, manana]).is('goles1', null)
+    if (!partidos?.length) return
     const ahora = ahoraARGmin()
-    const proximos = pHoy.filter(p => {
-      if (!p.hora || previaAnunciada.has(p.id)) return false
+    const proximos = partidos.filter(p => {
+      if (!p.hora || analisisAnunciado.has(p.id)) return false
       const [h, m] = p.hora.split(':').map(Number)
-      const diff = h * 60 + m - ahora
-      return diff > 0 && diff <= 15
+      const pMin = h * 60 + m + (p.fecha === manana ? 1440 : 0)
+      const diff = pMin - ahora
+      return diff > 0 && diff <= 20
     })
     if (!proximos.length) return
-    proximos.forEach(p => previaAnunciada.add(p.id))
-    const { data: jugadores }   = await supabase.from('jugadores').select('*').order('orden')
+    proximos.forEach(p => analisisAnunciado.add(p.id))
+    const { data: jugadores } = await supabase.from('jugadores').select('*').order('orden')
     const pronosticos = await fetchAllPronosticos()
-    await enviarAlGrupo(arnaldo.previa(proximos, jugadores || [], pronosticos || []))
-    console.log(`🍿 Previa enviada: ${proximos.map(p => p.equipo1 + '-' + p.equipo2).join(', ')}`)
-  } catch (e) { console.error('Error previa:', e.message) }
+    for (const p of proximos) {
+      await enviarAlGrupo(arnaldo.analisisPartido(p, jugadores || [], pronosticos || []))
+    }
+    console.log(`🍿 Análisis enviado: ${proximos.map(p => p.equipo1 + '-' + p.equipo2).join(', ')}`)
+  } catch (e) { console.error('Error análisis previo:', e.message) }
 })
 
 // Reclamo de pronósticos — 10:00 ARG (13:00 UTC), todos los días hasta el fin de grupos.
