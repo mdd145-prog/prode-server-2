@@ -402,6 +402,9 @@ async function handleResultadoManual(sock, texto, respondTo) {
 // ── Polling ESPN scoreboard ───────────────────────────────
 const finalizados = new Set()
 let liderActual = null  // para detectar cambios de punta en vivo
+// Primer poll después del arranque: siembra finalizados con los partidos que ya
+// están en post, así un redeploy de Render no vuelve a anunciar fines viejos.
+let warmupHecho = false
 // ── Odds API (cache 1 hora) ───────────────────────────────
 let oddsCache = { data: null, ts: 0 }
 
@@ -603,21 +606,27 @@ async function verificarPartidosEnVivo(forzar = false) {
       // FIN de partido: tabla oficial sin texto previo
       if (state === 'post' && esReciente && !finalizados.has(key)) {
         finalizados.add(key)
-        console.log(`🏁 FIN: ${partido.equipo1} ${g1}-${g2} ${partido.equipo2}`)
-        setTimeout(async () => {
-          try {
-            const board = await buildBoard()
-            const img   = await generarTablaImagen(board, 'oficial')
-            await enviarImagenAlGrupo(img, '')
-          } catch(e) { console.error(e.message) }
-        }, 1500)
+        if (warmupHecho) {
+          console.log(`🏁 FIN: ${partido.equipo1} ${g1}-${g2} ${partido.equipo2}`)
+          setTimeout(async () => {
+            try {
+              const board = await buildBoard()
+              const img   = await generarTablaImagen(board, 'oficial')
+              await enviarImagenAlGrupo(img, '')
+            } catch(e) { console.error(e.message) }
+          }, 1500)
+        } else {
+          // Warmup: post existente en la base al arrancar — registrar pero NO anunciar
+          console.log(`🧊 Warmup: ${partido.equipo1} ${g1}-${g2} ${partido.equipo2} ya estaba terminado, no se anuncia`)
+        }
       }
       // GOL en vivo: anuncio + tabla no oficial. Salvaguardas:
+      //  - warmup hecho (no anunciar al primer poll tras un redeploy)
       //  - solo si seguía en juego ('in')
       //  - solo si antes ya teníamos un score (no era null)
       //  - solo si el delta total es exactamente +1 (un gol, no catch-up)
       //  - nunca si bajó (VAR/anulación)
-      else if (cambio && state === 'in' && prev1 !== null && prev2 !== null) {
+      else if (warmupHecho && cambio && state === 'in' && prev1 !== null && prev2 !== null) {
         const d1 = g1 - prev1, d2 = g2 - prev2
         if (d1 >= 0 && d2 >= 0 && d1 + d2 === 1) {
           await enviarAlGrupo(arnaldo.gol(partido.equipo1, g1, partido.equipo2, g2))
@@ -638,7 +647,7 @@ async function verificarPartidosEnVivo(forzar = false) {
     }
 
     // Cambio de líder en vivo (solo con punta en solitario, para no anunciar empates)
-    if (huboUpdate) {
+    if (warmupHecho && huboUpdate) {
       const board = await buildBoard()
       if (board.length > 1 && board[0].tot > board[1].tot) {
         const punta = board[0].nombre
@@ -648,6 +657,12 @@ async function verificarPartidosEnVivo(forzar = false) {
         }
         liderActual = punta
       }
+    } else if (!warmupHecho) {
+      // Inicializamos liderActual sin anunciar
+      const board = await buildBoard()
+      if (board.length > 1 && board[0].tot > board[1].tot) liderActual = board[0].nombre
+      warmupHecho = true
+      console.log('🧊 Warmup completado, próximos polls ya disparan anuncios')
     }
   } catch (e) {
     if (e.response?.status === 429) console.log('⚠ Rate limit ESPN')
