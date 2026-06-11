@@ -100,7 +100,7 @@ async function buildBoard() {
       jug++; tot += pts
       if (pts === 3) ex++; else if (pts === 1) lv++; else fail++
     }
-    const pct = jug > 0 ? (((ex + lv) / jug) * 100).toFixed(0) + '%' : '-'
+    const pct = jug > 0 ? ((tot / (jug * 3)) * 100).toFixed(0) + '%' : '-'
     return { id: j.id, nombre: j.nombre, tot, ex, lv, fail, jug, pct }
   }).sort((a, b) => b.tot - a.tot)
 }
