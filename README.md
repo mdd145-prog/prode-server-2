@@ -1,6 +1,6 @@
 # Prode Bot 2026 — Servidor
 
-Bot de WhatsApp (Baileys) + Supabase + football-data.org para el Prode del Mundial 2026.
+Bot de WhatsApp (Baileys) + Supabase + ESPN scoreboard (público) para el Prode del Mundial 2026.
 
 ## Variables de entorno necesarias
 
@@ -11,9 +11,7 @@ SUPABASE_URL=https://TU_PROYECTO.supabase.co
 SUPABASE_KEY=service_role_key_secreta   # ⚠️ debe ser la service_role, NO la anon
 GROUP_ID=id_del_grupo@g.us              # grupo de WhatsApp destino
 ADMIN_JID=549XXXXXXXXXX@s.whatsapp.net  # número del admin (opcional, tiene default)
-FOOTBALL_API_KEY=tu_api_key_de_football-data.org
-FOOTBALL_COMPETITION=WC                 # WC = Mundial (cambiar solo para pruebas)
-ODDS_API_KEY=tu_key_de_the-odds-api     # opcional, para !proba
+ODDS_API_KEY=tu_key_de_the-odds-api     # opcional, solo para !proba (/odds)
 ADMIN_TOKEN=token_secreto_largo         # protege los endpoints /admin/*
 PORT=3000
 ```
@@ -41,7 +39,7 @@ PORT=3000
 
 ## Comportamiento automático
 
-- Polling de resultados cada 2 minutos vía football-data.org
+- Polling de resultados cada 30 segundos vía ESPN scoreboard (gratuito, sin key)
 - Cuando termina un partido → manda resultado con puntos + tabla oficial
 - Cron 8am (hora Argentina) → manda el resumen del día si hay partidos
 

@@ -238,19 +238,7 @@ async function handleMessage(sock, msg) {
   const sendImage = async (buf, cap) => await sock.sendMessage(respondTo, { image: buf, caption: cap, mimetype: 'image/png' })
 
   try {
-    if (texto === '!tabla') {
-      await verificarPartidosEnVivo(false)
-      const board = await buildBoard()
-      if (!board.length) { await sendText('No hay datos aún'); return }
-      const hoyFecha = hoyARG()
-      const { data: pAll }  = await supabase.from('partidos').select('id,goles1')
-      const { data: pHoy }  = await supabase.from('partidos').select('*').eq('fecha', hoyFecha).not('goles1','is',null)
-      const jugados = pAll?.filter(p => p.goles1 !== null).length || 0
-      const liveMatches = pHoy || []
-      const img = await generarTablaImagen(board, 'nooficial', { jugados, liveMatches })
-      await sendImage(img, '')
-    }
-    else if (texto === '!hoy') {
+    if (texto === '!hoy') {
       const hoy = hoyARG()
       const { data: pHoy }  = await supabase.from('partidos').select('*').eq('fecha', hoy)
       if (!pHoy?.length) { await sendText(`No hay partidos hoy (${hoy})`); return }
@@ -280,11 +268,11 @@ async function handleMessage(sock, msg) {
     else if (texto === '!ayuda' || texto === 'hola' || texto === 'ping') {
       await sendText(
         `🤖 *Prode Mundial 2026 — Comandos:*\n\n` +
-        `!tabla → Tabla NO OFICIAL (en vivo)\n` +
         `!hoy → Partidos de hoy + pronósticos\n` +
         `!dia YYYY-MM-DD → Partidos de una fecha\n` +
         `!chances → Quién sigue en carrera\n` +
-        `!ayuda → Este mensaje`
+        `!ayuda → Este mensaje\n\n` +
+        `_La tabla se manda automáticamente cuando hay un gol o termina un partido._`
       )
     }
     else if (senderIsAdmin && texto === '!oficial') {
@@ -336,7 +324,7 @@ async function handleMessage(sock, msg) {
       const { data: j } = await supabase.from('jugadores').select('id')
       await sendText(
         `📊 *Estado:*\nJugadores: ${j?.length || 0}\nPartidos jugados: ${p?.length || 0}/72\n` +
-        `GROUP_ID: ${groupId || '❌ NO CONFIGURADO'}\nAPI fútbol: ${process.env.FOOTBALL_API_KEY ? '✅' : '❌'}`
+        `GROUP_ID: ${groupId || '❌ NO CONFIGURADO'}\nFuente resultados: ESPN (pública)`
       )
     }
     else if (!texto.startsWith('!') && (arnaldo.esMencion(texto) || esReplyAlBot(msg))) {
@@ -404,7 +392,7 @@ async function handleResultadoManual(sock, texto, respondTo) {
   }
 }
 
-// ── Polling football-data.org ─────────────────────────────
+// ── Polling ESPN scoreboard ───────────────────────────────
 const finalizados = new Set()
 let liderActual = null  // para detectar cambios de punta en vivo
 // ── Odds API (cache 1 hora) ───────────────────────────────
@@ -551,46 +539,58 @@ async function chancesTexto() {
   return lines.join('\n')
 }
 
+// Ventana ±1 día en formato YYYYMMDD para el rango de ESPN
+const yyyymmdd = ms => {
+  const d = new Date(ms)
+  return `${d.getUTCFullYear()}${String(d.getUTCMonth()+1).padStart(2,'0')}${String(d.getUTCDate()).padStart(2,'0')}`
+}
+
 async function verificarPartidosEnVivo(forzar = false) {
-  if (!process.env.FOOTBALL_API_KEY) { if (forzar) console.log('⚠ FOOTBALL_API_KEY no configurada'); return }
   try {
-    // Ventana de ±1 día: un partido a las 22:00/23:00 ARG ya es "mañana" en UTC para la API
-    const ahora       = Date.now()
-    const dateFrom    = new Date(ahora - 24 * 3600 * 1000).toISOString().slice(0, 10)
-    const dateTo      = new Date(ahora + 24 * 3600 * 1000).toISOString().slice(0, 10)
-    const competition = process.env.FOOTBALL_COMPETITION || 'WC'
-    const apiBase     = process.env.FOOTBALL_API_BASE || 'https://api.football-data.org'
-    const res = await axios.get(`${apiBase}/v4/competitions/${competition}/matches`, {
-      params: { dateFrom, dateTo },
-      headers: { 'X-Auth-Token': process.env.FOOTBALL_API_KEY },
+    const ahora   = Date.now()
+    const from    = yyyymmdd(ahora - 24 * 3600 * 1000)
+    const to      = yyyymmdd(ahora + 24 * 3600 * 1000)
+    const apiBase = process.env.ESPN_API_BASE || 'https://site.api.espn.com'
+    const league  = process.env.ESPN_LEAGUE   || 'fifa.world'
+    const res = await axios.get(`${apiBase}/apis/site/v2/sports/soccer/${league}/scoreboard`, {
+      params: { dates: `${from}-${to}` },
       timeout: 10000
     })
-    const matches = res.data?.matches || []
-    if (forzar) console.log(`📡 API: ${matches.length} partidos encontrados (${dateFrom} a ${dateTo})`)
-    // Matcheo por nombres contra todos los partidos (en fase de grupos cada cruce es único)
+    const events = res.data?.events || []
+    if (forzar) console.log(`📡 ESPN: ${events.length} partidos (${from} a ${to})`)
     const { data: dbPartidos } = await supabase.from('partidos').select('*')
 
     let huboUpdate = false
-    for (const f of matches) {
-      const status = f.status
-      const g1     = f.score?.fullTime?.home ?? null
-      const g2     = f.score?.fullTime?.away ?? null
-      const t1     = mapTeam(f.homeTeam?.name || '')
-      const t2     = mapTeam(f.awayTeam?.name || '')
+    for (const ev of events) {
+      const comp = ev.competitions?.[0]
+      const competitors = comp?.competitors || []
+      const home = competitors.find(c => c.homeAway === 'home')
+      const away = competitors.find(c => c.homeAway === 'away')
+      const rawH = home?.team?.displayName || home?.team?.name || ''
+      const rawA = away?.team?.displayName || away?.team?.name || ''
+      const t1   = mapTeam(rawH)
+      const t2   = mapTeam(rawA)
       const partido = dbPartidos?.find(p => (p.equipo1 === t1 && p.equipo2 === t2) || (p.equipo1 === t2 && p.equipo2 === t1))
       if (!partido) { if (forzar) console.log(`⚠ No encontrado: "${t1}" vs "${t2}"`); continue }
 
-      if (g1 !== null && g2 !== null && (partido.goles1 !== g1 || partido.goles2 !== g2)) {
+      const state = ev.status?.type?.state // 'pre' | 'in' | 'post'
+      if (state === 'pre') continue          // sin score real todavía
+
+      const g1 = home?.score == null ? null : Number(home.score)
+      const g2 = away?.score == null ? null : Number(away.score)
+      if (!Number.isFinite(g1) || !Number.isFinite(g2)) continue
+
+      if (partido.goles1 !== g1 || partido.goles2 !== g2) {
         await supabase.from('partidos').update({ goles1: g1, goles2: g2 }).eq('id', partido.id)
         huboUpdate = true
-        if (forzar) console.log(`📊 ${partido.equipo1} ${g1}-${g2} ${partido.equipo2}`)
+        if (forzar) console.log(`📊 ${partido.equipo1} ${g1}-${g2} ${partido.equipo2} (${state})`)
       }
 
       const key = partido.id
       // Solo anunciar finales recientes (evita re-anunciar viejos si el server se reinicia)
-      const inicioMs = new Date(f.utcDate || 0).getTime()
-      const esReciente = ahora - inicioMs < 4 * 3600 * 1000
-      if (status === 'FINISHED' && esReciente && !finalizados.has(key)) {
+      const inicioMs = new Date(ev.date || 0).getTime()
+      const esReciente = ahora - inicioMs < 6 * 3600 * 1000
+      if (state === 'post' && esReciente && !finalizados.has(key)) {
         finalizados.add(key)
         const msgFin = await mensajeFinPartido({ ...partido, goles1: g1, goles2: g2 })
         await enviarAlGrupo(msgFin)
@@ -618,15 +618,14 @@ async function verificarPartidosEnVivo(forzar = false) {
       }
     }
   } catch (e) {
-    if (e.response?.status === 429) console.log('⚠ Rate limit API')
-    else console.error('Error polling:', e.message)
+    if (e.response?.status === 429) console.log('⚠ Rate limit ESPN')
+    else console.error('Error polling ESPN:', e.message)
   }
 }
 
 
-cron.schedule('*/2 * * * *', async () => {
-  await verificarPartidosEnVivo()
-})
+// Polling cada 30s — ESPN es gratis y soporta esta frecuencia sin problemas
+setInterval(() => { verificarPartidosEnVivo().catch(e => console.error('poll err:', e.message)) }, 30000)
 
 // Análisis previo: 20 min antes de cada partido, Arnaldo manda los pronósticos agrupados por marcador.
 // Incluye partidos de mañana (00:00 ARG cuenta como "mañana" en la DB).

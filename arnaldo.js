@@ -50,6 +50,21 @@ const CIERRES_FIN = [
   ``, ``, ``,  // a veces sin cierre, para no sobrecargar
 ]
 
+// ── GOL EN VIVO ───────────────────────────────────────────
+const GOL = [
+  (eq, marcador) => `⚽ *¡GOL de ${eq}!*\n${marcador}`,
+  (eq, marcador) => `⚽ *Convirtió ${eq}*.\n${marcador}`,
+  (eq, marcador) => `⚽ *Gol de ${eq}*. Queda ${marcador}.`,
+  (eq, marcador) => `⚽ *¡Lo dio vuelta... o lo amplió! Gol de ${eq}.*\n${marcador}`,
+]
+
+const CAPTIONS_NOOFICIAL = [
+  `🟡 Tabla NO oficial (en vivo).`,
+  `🟡 Así queda la tabla con el resultado parcial.`,
+  `🟡 Posiciones provisorias mientras se juega.`,
+  ``,
+]
+
 // ── CAMBIO DE LÍDER EN VIVO ───────────────────────────────
 const CAMBIO_LIDER = [
   (n, v) => `🚨 Atención: *${n}* pasa al frente de la tabla, superando a ${v}. ¡Felicitaciones!`,
@@ -122,9 +137,9 @@ const SALUDOS = [
   n => `Buenas, ${n}. ¿En qué puedo ayudarlo? Puede ver los comandos con *!ayuda*.`,
   n => `Hola ${n}, a sus órdenes. Para ver qué puedo hacer, escriba *!ayuda*.`,
   n => `Buenas, ${n}. Estoy para ayudarlo con el prode. *!ayuda* muestra todos los comandos disponibles.`,
-  n => `Hola ${n}. Si necesita la tabla escriba *!tabla*; los partidos del día, *!hoy*; el listado completo, *!ayuda*.`,
+  n => `Hola ${n}. Para ver los partidos del día escriba *!hoy*; el listado completo, *!ayuda*.`,
   n => `A sus órdenes, ${n}. Cualquier consulta sobre el prode, acá estoy. Pruebe con *!ayuda*.`,
-  n => `Buenas, ${n}. ¿Quiere ver la tabla (*!tabla*), los partidos de hoy (*!hoy*), o el listado completo (*!ayuda*)?`,
+  n => `Buenas, ${n}. ¿Quiere ver los partidos de hoy (*!hoy*), las chances (*!chances*), o el listado completo (*!ayuda*)?`,
 ]
 
 const SEGUNDAS = [
@@ -185,7 +200,11 @@ module.exports = {
 
   captionOficial: () => pick(CAPTIONS_OFICIAL),
 
+  captionNooficial: () => pick(CAPTIONS_NOOFICIAL),
+
   captionDia: () => pick(CAPTIONS_DIA),
+
+  gol: (equipo, marcador) => pick(GOL)(equipo, marcador),
 
   // ¿El texto menciona a Arnaldo por alguno de sus apodos?
   esMencion: texto => ALIAS_RE.test(texto),
