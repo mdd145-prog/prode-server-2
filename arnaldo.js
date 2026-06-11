@@ -50,21 +50,6 @@ const CIERRES_FIN = [
   ``, ``, ``,  // a veces sin cierre, para no sobrecargar
 ]
 
-// ── GOL EN VIVO ───────────────────────────────────────────
-const GOL = [
-  (eq, marcador) => `⚽ *¡GOL de ${eq}!*\n${marcador}`,
-  (eq, marcador) => `⚽ *Convirtió ${eq}*.\n${marcador}`,
-  (eq, marcador) => `⚽ *Gol de ${eq}*. Queda ${marcador}.`,
-  (eq, marcador) => `⚽ *¡Lo dio vuelta... o lo amplió! Gol de ${eq}.*\n${marcador}`,
-]
-
-const CAPTIONS_NOOFICIAL = [
-  `🟡 Tabla NO oficial (en vivo).`,
-  `🟡 Así queda la tabla con el resultado parcial.`,
-  `🟡 Posiciones provisorias mientras se juega.`,
-  ``,
-]
-
 // ── CAMBIO DE LÍDER EN VIVO ───────────────────────────────
 const CAMBIO_LIDER = [
   (n, v) => `🚨 Atención: *${n}* pasa al frente de la tabla, superando a ${v}. ¡Felicitaciones!`,
@@ -200,11 +185,9 @@ module.exports = {
 
   captionOficial: () => pick(CAPTIONS_OFICIAL),
 
-  captionNooficial: () => pick(CAPTIONS_NOOFICIAL),
-
   captionDia: () => pick(CAPTIONS_DIA),
 
-  gol: (equipo, marcador) => pick(GOL)(equipo, marcador),
+  gol: (eq1, g1, eq2, g2) => `Gol: ${eq1} ${g1} ${eq2} ${g2}`,
 
   // ¿El texto menciona a Arnaldo por alguno de sus apodos?
   esMencion: texto => ALIAS_RE.test(texto),

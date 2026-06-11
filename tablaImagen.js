@@ -160,7 +160,7 @@ async function generarTablaGenerica(board, config) {
     ctx.fillStyle = '#1a1a1a'
     ctx.fillText(`${p.fail}`, cols[6].x + cols[6].w/2, cy)
 
-    const pct = p.jug > 0 ? ((p.ex/p.jug)*100).toFixed(2)+' %' : '-'
+    const pct = p.jug > 0 ? (((p.ex+p.lv)/p.jug)*100).toFixed(2)+' %' : '-'
     ctx.fillStyle = '#555555'; ctx.font = '9px Arial'
     ctx.fillText(pct, cols[7].x + cols[7].w/2, cy)
   })

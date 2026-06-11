@@ -43,11 +43,13 @@ const TEAM_MAP = {
   'Korea Republic': 'Rep. de Corea', 'South Korea': 'Rep. de Corea',
   'Czechia': 'Rep. Checa', 'Czech Republic': 'Rep. Checa',
   'Canada': 'Canadá', 'Bosnia and Herzegovina': 'Bosnia Herz.',
-  'Bosnia & Herzegovina': 'Bosnia Herz.', 'Qatar': 'Catar',
+  'Bosnia & Herzegovina': 'Bosnia Herz.', 'Bosnia-Herzegovina': 'Bosnia Herz.',
+  'Qatar': 'Catar',
   'Switzerland': 'Suiza', 'Brazil': 'Brasil', 'Morocco': 'Marruecos',
   'Haiti': 'Haití', 'Scotland': 'Escocia',
   'United States': 'Estados Unidos', 'USA': 'Estados Unidos',
-  'Paraguay': 'Paraguay', 'Australia': 'Australia', 'Turkey': 'Turquía',
+  'Paraguay': 'Paraguay', 'Australia': 'Australia',
+  'Turkey': 'Turquía', 'Türkiye': 'Turquía',
   'Germany': 'Alemania', 'Curaçao': 'Curazao', 'Curacao': 'Curazao',
   "Côte d'Ivoire": 'Costa de Marfil', 'Ivory Coast': 'Costa de Marfil',
   'Ecuador': 'Ecuador', 'Netherlands': 'Países Bajos', 'Japan': 'Japón',
@@ -98,7 +100,7 @@ async function buildBoard() {
       jug++; tot += pts
       if (pts === 3) ex++; else if (pts === 1) lv++; else fail++
     }
-    const pct = jug > 0 ? ((ex / jug) * 100).toFixed(0) + '%' : '-'
+    const pct = jug > 0 ? (((ex + lv) / jug) * 100).toFixed(0) + '%' : '-'
     return { id: j.id, nombre: j.nombre, tot, ex, lv, fail, jug, pct }
   }).sort((a, b) => b.tot - a.tot)
 }
@@ -377,19 +379,7 @@ async function handleResultadoManual(sock, texto, respondTo) {
   const { error } = await supabase.from('partidos').update({ goles1: g1, goles2: g2 }).eq('id', partido.id)
   if (error) { await sendText(`❌ Error: ${error.message}`); return }
 
-  await sendText(`✅ ${partido.equipo1} ${g1}-${g2} ${partido.equipo2}`)
-  const groupId = process.env.GROUP_ID
-  if (groupId) {
-    const msgFin = await mensajeFinPartido({ ...partido, goles1: g1, goles2: g2 })
-    await enviarAlGrupo(msgFin)
-    setTimeout(async () => {
-      try {
-        const board = await buildBoard()
-        const img   = await generarTablaImagen(board, 'oficial')
-        await enviarImagenAlGrupo(img, arnaldo.captionOficial())
-      } catch(e) { console.error(e.message) }
-    }, 3000)
-  }
+  await sendText(`✅ ${partido.equipo1} ${g1}-${g2} ${partido.equipo2} cargado (silencioso, no se avisa al grupo)`)
 }
 
 // ── Polling ESPN scoreboard ───────────────────────────────
@@ -580,28 +570,53 @@ async function verificarPartidosEnVivo(forzar = false) {
       const g2 = away?.score == null ? null : Number(away.score)
       if (!Number.isFinite(g1) || !Number.isFinite(g2)) continue
 
-      if (partido.goles1 !== g1 || partido.goles2 !== g2) {
+      const prev1 = partido.goles1
+      const prev2 = partido.goles2
+      const cambio = prev1 !== g1 || prev2 !== g2
+      if (cambio) {
         await supabase.from('partidos').update({ goles1: g1, goles2: g2 }).eq('id', partido.id)
         huboUpdate = true
         if (forzar) console.log(`📊 ${partido.equipo1} ${g1}-${g2} ${partido.equipo2} (${state})`)
       }
 
       const key = partido.id
-      // Solo anunciar finales recientes (evita re-anunciar viejos si el server se reinicia)
       const inicioMs = new Date(ev.date || 0).getTime()
       const esReciente = ahora - inicioMs < 6 * 3600 * 1000
+
+      // FIN de partido: tabla oficial sin texto previo
       if (state === 'post' && esReciente && !finalizados.has(key)) {
         finalizados.add(key)
-        const msgFin = await mensajeFinPartido({ ...partido, goles1: g1, goles2: g2 })
-        await enviarAlGrupo(msgFin)
         console.log(`🏁 FIN: ${partido.equipo1} ${g1}-${g2} ${partido.equipo2}`)
         setTimeout(async () => {
           try {
             const board = await buildBoard()
             const img   = await generarTablaImagen(board, 'oficial')
-            await enviarImagenAlGrupo(img, arnaldo.captionOficial())
+            await enviarImagenAlGrupo(img, '')
           } catch(e) { console.error(e.message) }
-        }, 3000)
+        }, 1500)
+      }
+      // GOL en vivo: anuncio + tabla no oficial. Salvaguardas:
+      //  - solo si seguía en juego ('in')
+      //  - solo si antes ya teníamos un score (no era null)
+      //  - solo si el delta total es exactamente +1 (un gol, no catch-up)
+      //  - nunca si bajó (VAR/anulación)
+      else if (cambio && state === 'in' && prev1 !== null && prev2 !== null) {
+        const d1 = g1 - prev1, d2 = g2 - prev2
+        if (d1 >= 0 && d2 >= 0 && d1 + d2 === 1) {
+          await enviarAlGrupo(arnaldo.gol(partido.equipo1, g1, partido.equipo2, g2))
+          console.log(`⚽ Gol: ${partido.equipo1} ${g1}-${g2} ${partido.equipo2}`)
+          setTimeout(async () => {
+            try {
+              const { data: pAll } = await supabase.from('partidos').select('id,goles1,fecha')
+              const hoyFecha = hoyARG()
+              const liveMatches = (pAll || []).filter(p => p.fecha === hoyFecha && p.goles1 !== null)
+              const jugados = (pAll || []).filter(p => p.goles1 !== null).length
+              const board = await buildBoard()
+              const img = await generarTablaImagen(board, 'nooficial', { jugados, liveMatches })
+              await enviarImagenAlGrupo(img, '')
+            } catch(e) { console.error(e.message) }
+          }, 1500)
+        }
       }
     }
 
@@ -668,49 +683,6 @@ cron.schedule('*/5 * * * *', async () => {
 // Reclamo de pronósticos — 10:00 ARG (13:00 UTC), todos los días hasta el fin de grupos.
 // Arnaldo recuerda cordialmente a los que no completaron sus 72.
 const WEB_URL = 'https://mdd145-prog.github.io/Prode-Mundial-2026-LVM/'
-cron.schedule('0 13 * * *', async () => {
-  try {
-    if (hoyARG() > '2026-06-27') return  // termina con la fase de grupos
-    const { data: jugadores }   = await supabase.from('jugadores').select('*').order('orden')
-    const pronosticos = await fetchAllPronosticos('jugador_id,goles1')
-    if (!jugadores?.length) return
-    const conteo = j => (pronosticos || []).filter(p => p.jugador_id === j.id && p.goles1 !== null).length
-    const sinNada = [], incompletos = [], completos = []
-    for (const j of jugadores) {
-      const done = conteo(j)
-      if (done === 0) sinNada.push(j.nombre)
-      else if (done < 72) incompletos.push({ nombre: j.nombre, done })
-      else completos.push(j.nombre)
-    }
-    if (!sinNada.length && !incompletos.length) return  // todos cumplieron, Arnaldo descansa
-    await enviarAlGrupo(arnaldo.reclamo(sinNada, incompletos, completos, WEB_URL))
-    console.log(`💋 Reclamo enviado: ${sinNada.length} sin nada, ${incompletos.length} a medias`)
-  } catch (e) { console.error('Error reclamo:', e.message) }
-})
-
-// Resumen nocturno de Arnaldo — 01:30 ARG (04:30 UTC), cierra el día anterior
-cron.schedule('30 4 * * *', async () => {
-  try {
-    const ayer = new Date(Date.now() - 24 * 3600e3).toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
-    const { data: partidos } = await supabase.from('partidos').select('*')
-    const delDia = (partidos || []).filter(p => p.fecha === ayer && p.goles1 !== null)
-    if (!delDia.length) return
-    const { data: jugadores }   = await supabase.from('jugadores').select('*').order('orden')
-    const pronosticos = await fetchAllPronosticos()
-    const stats = (jugadores || []).map(j => {
-      let pts = 0, ex = 0, fail = 0
-      for (const p of delDia) {
-        const pr = pronosticos?.find(x => x.jugador_id === j.id && x.partido_id === p.id)
-        const k = calcPts(pr, p)
-        if (k === 3) { pts += 3; ex++ } else if (k === 1) { pts++ } else if (k === 0) { fail++ }
-      }
-      return { nombre: j.nombre, pts, ex, fail }
-    }).sort((a, b) => b.pts - a.pts)
-    await enviarAlGrupo(arnaldo.resumenNocturno(ayer, delDia, stats))
-    console.log('🌙 Resumen nocturno enviado:', ayer)
-  } catch (e) { console.error('Error resumen nocturno:', e.message) }
-})
-
 // Cron 8am Argentina (11am UTC) — manda resumen del dia si hay partidos
 cron.schedule('0 11 * * *', async () => {
   try {
