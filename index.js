@@ -190,16 +190,27 @@ async function mensajeFinPartido(partido) {
 }
 
 // ── Helpers de envío ──────────────────────────────────────
+// Modo test (!test on/off): redirige los envíos del grupo al ADMIN en privado.
+// Útil para probar el flujo nuevo (anuncio de gol, fin de partido) sin spamear el grupo.
+// Toggle en memoria, vuelve a OFF si el server reinicia.
+let redirToAdmin = false
+
+function destinoGrupo() {
+  if (redirToAdmin) return ADMIN_JID
+  return process.env.GROUP_ID
+}
+
 async function enviarAlGrupo(texto) {
-  const g = process.env.GROUP_ID
-  if (!g || !botSock) return console.log('⚠ GROUP_ID o bot no disponible')
-  await botSock.sendMessage(g, { text: texto })
+  const g = destinoGrupo()
+  if (!g || !botSock) return console.log('⚠ destino o bot no disponible')
+  await botSock.sendMessage(g, { text: redirToAdmin ? `🧪 [TEST] ${texto}` : texto })
 }
 
 async function enviarImagenAlGrupo(buffer, caption) {
-  const g = process.env.GROUP_ID
-  if (!g || !botSock) return console.log('⚠ GROUP_ID o bot no disponible')
-  await botSock.sendMessage(g, { image: buffer, caption, mimetype: 'image/png' })
+  const g = destinoGrupo()
+  if (!g || !botSock) return console.log('⚠ destino o bot no disponible')
+  const cap = redirToAdmin ? `🧪 [TEST]${caption ? ' '+caption : ''}` : caption
+  await botSock.sendMessage(g, { image: buffer, caption: cap, mimetype: 'image/png' })
 }
 
 // ¿El mensaje es una respuesta (quote) a un mensaje del bot? → Arnaldo sigue la charla
@@ -313,6 +324,12 @@ async function handleMessage(sock, msg) {
       await enviarAlGrupo(arnaldo.novedades(WEB_URL))
       if (isPrivateAdmin) await sendText('✅ Novedades enviadas al grupo')
     }
+    else if (senderIsAdmin && (texto === '!test on' || texto === '!test off')) {
+      redirToAdmin = (texto === '!test on')
+      await sendText(redirToAdmin
+        ? '🧪 Modo TEST *ACTIVADO*. Los envíos automáticos al grupo (gol, fin de partido, tabla oficial, cambio de líder) te van a llegar acá en privado con prefijo [TEST]. Para apagarlo: *!test off*.'
+        : '✅ Modo TEST *DESACTIVADO*. El bot vuelve a postear al grupo normalmente.')
+    }
     else if (senderIsAdmin && texto === '!sync') {
       await sendText('🔄 Sincronizando...')
       await verificarPartidosEnVivo(true)
@@ -326,7 +343,7 @@ async function handleMessage(sock, msg) {
       const { data: j } = await supabase.from('jugadores').select('id')
       await sendText(
         `📊 *Estado:*\nJugadores: ${j?.length || 0}\nPartidos jugados: ${p?.length || 0}/72\n` +
-        `GROUP_ID: ${groupId || '❌ NO CONFIGURADO'}\nFuente resultados: ESPN (pública)`
+        `GROUP_ID: ${groupId || '❌ NO CONFIGURADO'}\nFuente resultados: ESPN (pública)\nModo TEST: ${redirToAdmin ? '🧪 SÍ (envíos al admin)' : 'NO'}`
       )
     }
     else if (!texto.startsWith('!') && (arnaldo.esMencion(texto) || esReplyAlBot(msg))) {
