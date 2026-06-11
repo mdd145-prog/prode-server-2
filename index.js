@@ -251,7 +251,20 @@ async function handleMessage(sock, msg) {
   const sendImage = async (buf, cap) => await sock.sendMessage(respondTo, { image: buf, caption: cap, mimetype: 'image/png' })
 
   try {
-    if (texto === '!hoy') {
+    if (senderIsAdmin && texto === '!tabla') {
+      await verificarPartidosEnVivo(false)
+      const board = await buildBoard()
+      if (!board.length) { await sendText('No hay datos aún'); return }
+      const hoyFecha = hoyARG()
+      const { data: pAll }  = await supabase.from('partidos').select('id,goles1')
+      const { data: pHoy }  = await supabase.from('partidos').select('*').eq('fecha', hoyFecha).not('goles1','is',null)
+      const jugados = pAll?.filter(p => p.goles1 !== null).length || 0
+      const liveMatches = pHoy || []
+      const img = await generarTablaImagen(board, 'nooficial', { jugados, liveMatches })
+      if (isPrivateAdmin) await sendImage(img, '')
+      else await enviarImagenAlGrupo(img, '')
+    }
+    else if (texto === '!hoy') {
       const hoy = hoyARG()
       const { data: pHoy }  = await supabase.from('partidos').select('*').eq('fecha', hoy)
       if (!pHoy?.length) { await sendText(`No hay partidos hoy (${hoy})`); return }
