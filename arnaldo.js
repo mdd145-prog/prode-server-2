@@ -50,6 +50,20 @@ const CIERRES_FIN = [
   ``, ``, ``,  // a veces sin cierre, para no sobrecargar
 ]
 
+// ── ARRANQUE Y CIERRE DE JORNADA (comandos manuales del admin) ────
+// Mensajes de saludo que Arnaldo manda al grupo cuando el admin dispara
+// !arranque (apertura del día) y !cierre (fin del día).
+const ARRANQUES_DIA = [
+  f => `🟢 Buen día. Comienza la jornada del *${f}*. Estos son los partidos y los pronósticos cargados:`,
+  f => `🟢 Buenos días. Arranca la jornada del *${f}*. Suerte a todos.`,
+  f => `🟢 Buen día. Hoy *${f}* se juega prode. Acá va la grilla del día:`,
+]
+const CIERRES_DIA = [
+  f => `🌙 Cerramos la jornada del *${f}*. Así quedó la tabla oficial:`,
+  f => `🌙 Cierre del *${f}*. Tabla oficial actualizada:`,
+  f => `🌙 Fin de la jornada del *${f}*. Acá la tabla:`,
+]
+
 // ── CAMBIO DE LÍDER EN VIVO ───────────────────────────────
 const CAMBIO_LIDER = [
   (n, v) => `🚨 Atención: *${n}* pasa al frente de la tabla, superando a ${v}. ¡Felicitaciones!`,
@@ -183,6 +197,10 @@ module.exports = {
 
   // Título del envío de las 8:01 (va solo, arriba de proba + proba_hoy)
   tituloProba: (fecha) => `🎲 *Líneas del día (${fecha})*`,
+
+  // Saludos para !arranque y !cierre (ver index.js)
+  arranqueDia: (fecha) => pick(ARRANQUES_DIA)(fecha),
+  cierreDia: (fecha) => pick(CIERRES_DIA)(fecha),
 
   captionDia: () => pick(CAPTIONS_DIA),
 
