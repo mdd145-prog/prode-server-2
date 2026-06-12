@@ -314,8 +314,6 @@ async function handleMessage(sock, msg) {
     else if (senderIsAdmin && texto === '!admin') {
       await sendText(
         `🛠️ *Comandos de admin:*\n\n` +
-        `!arranque\n` +
-        `!cierre\n` +
         `!tabla\n` +
         `!oficial\n` +
         `!forzar\n` +
@@ -333,12 +331,10 @@ async function handleMessage(sock, msg) {
     else if (senderIsAdmin && texto === '!ayuda_admin') {
       await sendText(
         `📖 *Ayuda admin — qué hace cada comando:*\n\n` +
-        `*!arranque* → Apertura manual de la jornada. Manda al grupo un saludo de Arnaldo + la grilla del día con todos los pronósticos. Es el "buen día, hoy se juega" oficial.\n\n` +
-        `*!cierre* → Cierre manual de la jornada. Manda al grupo un saludo de Arnaldo + la Tabla Oficial actualizada. Es el "fin de jornada" oficial.\n\n` +
         `*!tabla* → Tabla NO oficial actual (con parcial si hay partidos en vivo). En privado vuelve a vos; en el grupo va al grupo.\n\n` +
         `*!oficial* → Tabla OFICIAL. Desde el grupo se publica al grupo con caption; desde privado te llega a vos como preview.\n\n` +
         `*!forzar* → Fuerza el envío de la Tabla Oficial al grupo (útil si quedó algo a medias).\n\n` +
-        `*!resumen* → Manda al grupo la grilla del día con todos los pronósticos (sin saludo, a diferencia de !arranque).\n\n` +
+        `*!resumen* → Manda al grupo la grilla del día con todos los pronósticos.\n\n` +
         `*!novedades* → Manda al grupo el mensaje de novedades con el link a la web.\n\n` +
         `*!proba* → Chances de ganar el torneo: Monte Carlo con cuotas reales del mercado (GANAR%, CUOTA, HOY, PROY).\n\n` +
         `*!proba_hoy* → Cómo quedaría la tabla hoy si pasan los resultados más probables del mercado.\n\n` +
@@ -378,33 +374,6 @@ async function handleMessage(sock, msg) {
       const img   = await generarTablaImagen(board, 'oficial')
       await enviarImagenAlGrupo(img, arnaldo.captionOficial())
       if (isPrivateAdmin) await sendText('✅ Tabla enviada al grupo')
-    }
-    else if (senderIsAdmin && texto === '!arranque') {
-      // Apertura manual del día: saludo de Arnaldo + grilla del día con pronósticos.
-      if (!groupId) { await sendText('❌ GROUP_ID no configurado'); return }
-      const hoy = hoyARG()
-      const { data: pHoy }  = await supabase.from('partidos').select('*').eq('fecha', hoy)
-      if (!pHoy?.length) { await sendText(`No hay partidos hoy (${hoy})`); return }
-      const fechaTxt = `${hoy.slice(8,10)}/${hoy.slice(5,7)}`
-      const { data: jugs }  = await supabase.from('jugadores').select('*').order('orden')
-      const preds = await fetchAllPronosticos()
-      const img = await generarImagenDia(pHoy, jugs || [], preds || [], hoy)
-      await enviarAlGrupo(arnaldo.arranqueDia(fechaTxt))
-      await enviarImagenAlGrupo(img, '')
-      if (isPrivateAdmin) await sendText('✅ Arranque enviado al grupo')
-    }
-    else if (senderIsAdmin && texto === '!cierre') {
-      // Cierre manual del día: saludo de Arnaldo + tabla oficial actualizada.
-      if (!groupId) { await sendText('❌ GROUP_ID no configurado'); return }
-      await verificarPartidosEnVivo(false)
-      const board = await buildBoard()
-      if (!board.length) { await sendText('No hay datos aún'); return }
-      const hoy = hoyARG()
-      const fechaTxt = `${hoy.slice(8,10)}/${hoy.slice(5,7)}`
-      const img = await generarTablaImagen(board, 'oficial')
-      await enviarAlGrupo(arnaldo.cierreDia(fechaTxt))
-      await enviarImagenAlGrupo(img, '')
-      if (isPrivateAdmin) await sendText('✅ Cierre enviado al grupo')
     }
     else if (senderIsAdmin && texto === '!novedades') {
       if (!groupId) { await sendText('❌ GROUP_ID no configurado'); return }
