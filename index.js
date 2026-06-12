@@ -1,5 +1,5 @@
 require('dotenv').config()
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, Browsers, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys')
+const { default: makeWASocket, DisconnectReason, Browsers, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys')
 const { Boom } = require('@hapi/boom')
 const QRCode = require('qrcode')
 const pino = require('pino')
@@ -11,6 +11,7 @@ const { generarTablaImagen, generarImagenDia, generarTablaProba, generarTablaCha
 const arnaldo = require('./arnaldo')
 const { generarProbaImg, generarProbaHoyImg, generarReporteAgrupado } = require('./reporteDiario')
 const { diaProdeARG, esDelDiaProde, partidosDelDia } = require('./dia')
+const { useSupabaseAuthState, clearSupabaseAuthState } = require('./waAuth')
 const PROBA_ACTIVO = true       // !proba / !proba_hoy habilitados (solo admin, ver senderIsAdmin)
 const PROBA_CRON_ACTIVO = true   // cron 8:01 ARG: difunde los reportes proba (HOY + torneo) al grupo
 
@@ -833,7 +834,8 @@ cron.schedule('1 11 * * *', async () => {
 
 // ── Conexión WhatsApp (Baileys) ────────────────────────────
 async function conectarBot() {
-  const { state, saveCreds } = await useMultiFileAuthState('./auth_baileys')
+  // Credenciales en Supabase (tabla wa_auth) — sobreviven a redeploys de Render.
+  const { state, saveCreds } = await useSupabaseAuthState(supabase)
 
   // Obtener versión actual de WhatsApp Web (evita error 405)
   let version = [2, 3000, 1015901307]
@@ -856,7 +858,7 @@ async function conectarBot() {
 
   sock.ev.on('creds.update', saveCreds)
 
-  sock.ev.on('connection.update', ({ connection, lastDisconnect, qr }) => {
+  sock.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
     if (qr) {
       ultimoQR = qr
       console.log('\n=== QR disponible en: https://prode-server-2.onrender.com/qr ===\n')
@@ -867,9 +869,9 @@ async function conectarBot() {
       const code = new Boom(lastDisconnect?.error)?.output?.statusCode
       console.log('Desconectado. Código:', code)
       if (code === 405 || code === DisconnectReason.loggedOut) {
-        // Sesión inválida — limpiar credenciales para forzar QR nuevo
-        const fs = require('fs')
-        try { fs.rmSync('./auth_baileys', { recursive: true, force: true }); console.log('🗑 Credenciales limpiadas') } catch(e) {}
+        // Sesión inválida — limpiar credenciales en Supabase para forzar QR nuevo
+        try { await clearSupabaseAuthState(supabase); console.log('🗑 Credenciales limpiadas (Supabase wa_auth)') }
+        catch(e) { console.log('⚠ No se pudieron limpiar credenciales:', e.message) }
         console.log('Reconectando para nuevo QR...')
         setTimeout(conectarBot, 3000)
       } else {
