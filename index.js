@@ -11,7 +11,18 @@ const { generarTablaImagen, generarImagenDia, generarTablaProba, generarTablaCha
 const arnaldo = require('./arnaldo')
 const { generarProbaImg, generarProbaHoyImg, generarReporteAgrupado } = require('./reporteDiario')
 const PROBA_ACTIVO = true       // !proba / !proba_hoy habilitados (solo admin, ver senderIsAdmin)
-const PROBA_CRON_ACTIVO = false  // cron 8:01 que difunde al grupo: apagado hasta que esté listo
+const PROBA_CRON_ACTIVO = true   // cron 8:01 ARG: difunde los reportes proba (HOY + torneo) al grupo
+// Bienvenida que explica !proba — se manda UNA sola vez, junto al reporte de las 8:01 de esta fecha.
+const BIENVENIDA_PROBA_FECHA = '2026-06-12'
+const MSG_BIENVENIDA_PROBA = `🎲 *¡Arrancó el Prode 2026!* 🎲
+
+Tirá *!proba* y mirá tus *chances reales de ganar el prode*.
+
+El cálculo está *vinculado a las líneas de las casas de apuestas*: agarramos las cuotas reales de cada partido y simulamos el Mundial miles de veces. Tu % es en cuántas de esas simulaciones terminás primero.
+
+Puntaje: *3 pts* resultado exacto · *1 pt* acertar ganador o empate.
+
+Suerte ⚽️`
 
 const app = express()
 app.use(express.json())
@@ -787,6 +798,7 @@ cron.schedule('1 11 * * *', async () => {
     const hoy = hoyARG()
     const { data: partidos } = await supabase.from('partidos').select('id').eq('fecha', hoy)
     if (!partidos?.length) return
+    if (hoy === BIENVENIDA_PROBA_FECHA) await enviarAlGrupo(MSG_BIENVENIDA_PROBA)
     const odds = await getOdds()
     const imgHoy = await generarProbaHoyImg(odds, hoy)
     if (imgHoy) await enviarImagenAlGrupo(imgHoy, '')
@@ -963,6 +975,6 @@ app.get('/preview/dia', async (req, res) => {
 })
 
 // ── Arrancar ──────────────────────────────────────────────
-const PORT = process.env.PORT || 3000
+const PORT = process.env.PORT || 10000   // Render espera 10000 por default; si no inyecta PORT, no caer a 3000 (la URL pública queda muerta)
 app.listen(PORT, () => console.log(`HTTP en puerto ${PORT}`))
 conectarBot().then(() => console.log('🚀 Iniciando conexión WhatsApp...')).catch(e => console.error('Error init:', e))
