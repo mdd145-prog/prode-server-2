@@ -105,7 +105,7 @@ async function generarProbaHoyImg(oddsData, date){
 // ── Análisis de pronósticos agrupados — TABLA (variante A, púrpura) ──
 const _meas = createCanvas(10,10).getContext('2d')
 // Acomoda nombres como TAGS que fluyen y wrappean dentro de un ancho.
-const layoutTags = (names, maxW) => { _meas.font='12px Arial'
+const layoutTags = (names, maxW) => { _meas.font='bold 12px Arial'
   const padX=11, gap=6, lines=[]; let line=[], lw=0
   for(const n of names){ const tw=Math.ceil(_meas.measureText(n).width)+padX*2
     if(lw+tw>maxW && line.length){ lines.push(line); line=[]; lw=0 }
@@ -151,8 +151,8 @@ function generarReporteAgrupado(partido, jugadores, pronosticos){
     let ty=y+9
     for(const line of r.tl){ let tx=tagsX
       for(const tag of line){
-        ctx.fillStyle=i===0?'#d6c3f5':'#e6ddfa'; rr(ctx,tx,ty,tag.w,tagH,tagH/2); ctx.fill()
-        ctx.fillStyle=i===0?'#3d0070':'#5b21b6'; ctx.font='12px Arial'; ctx.textAlign='center'; ctx.textBaseline='middle'
+        ctx.fillStyle=i===0?'#5b21b6':'#7c3aed'; rr(ctx,tx,ty,tag.w,tagH,tagH/2); ctx.fill()
+        ctx.fillStyle='#ffffff'; ctx.font='bold 12px Arial'; ctx.textAlign='center'; ctx.textBaseline='middle'
         ctx.fillText(tag.n, tx+tag.w/2, ty+tagH/2); ctx.textBaseline='alphabetic'
         tx+=tag.w+tagGap }
       ty+=tagH+tagGap }
