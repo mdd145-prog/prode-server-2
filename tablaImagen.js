@@ -43,13 +43,13 @@ async function generarTablaGenerica(board, config) {
     liveMatches = []               // partidos en vivo hoy
   } = config
 
-  const M       = 20   // margen blanco exterior
+  const M       = 16   // margen blanco exterior (= proba)
   const GAP     = 12   // espacio entre titulo y tabla
-  const TITLE_H = 38
-  const COL_H   = 26
-  const ROW_H   = 34
+  const TITLE_H = 42   // = proba
+  const COL_H   = 24
+  const ROW_H   = 28
   const FOOTER_H= 22
-  const tableW  = 460
+  const tableW  = 492  // = proba (W total 524)
   const H = M + TITLE_H + GAP + COL_H + board.length * ROW_H + FOOTER_H + M
   const W = tableW + M * 2
 
@@ -68,7 +68,7 @@ async function generarTablaGenerica(board, config) {
   roundRect(ctx, 0, 0, tableW, TITLE_H, 8)
   ctx.fill()
   ctx.fillStyle = '#ffffff'
-  ctx.font = 'bold 14px Arial'
+  ctx.font = 'bold 18px Arial'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
   ctx.fillText(titulo, tableW / 2, TITLE_H / 2)
@@ -107,24 +107,24 @@ async function generarTablaGenerica(board, config) {
   // Columnas (después del gap)
   const tY = TITLE_H + GAP + liveOffsetY
   const cols = [
-    { x: 0,   w: 28,  label: 'POS',     bg: colH1, align: 'center' },
-    { x: 28,  w: 150, label: 'JUGADOR', bg: colH1, align: 'left'   },
-    { x: 178, w: 42,  label: 'PTS',     bg: colH1, align: 'center' },
-    { x: 220, w: 34,  label: 'JUG',     bg: colH1, align: 'center' },
-    { x: 254, w: 38,  label: '3',       bg: colH2, align: 'center' },
-    { x: 292, w: 38,  label: '1',       bg: colH2, align: 'center' },
-    { x: 330, w: 38,  label: '0',       bg: colH2, align: 'center' },
-    { x: 368, w: tableW-368, label: '%', bg: colH3, align: 'center' },
+    { x: 0,   w: 30,  label: 'POS',     bg: colH1, align: 'center' },
+    { x: 30,  w: 176, label: 'JUGADOR', bg: colH1, align: 'left'   },
+    { x: 206, w: 44,  label: 'PTS',     bg: colH1, align: 'center' },
+    { x: 250, w: 32,  label: 'JUG',     bg: colH1, align: 'center' },
+    { x: 282, w: 40,  label: '3',       bg: colH2, align: 'center' },
+    { x: 322, w: 40,  label: '1',       bg: colH2, align: 'center' },
+    { x: 362, w: 40,  label: '0',       bg: colH2, align: 'center' },
+    { x: 402, w: tableW-402, label: '%', bg: colH3, align: 'center' },
   ]
 
   cols.forEach(col => {
     ctx.fillStyle = col.bg
     ctx.fillRect(col.x, tY, col.w, COL_H)
     ctx.fillStyle = '#ffffff'
-    ctx.font = 'bold 8px Arial'
+    ctx.font = 'bold 10px Arial'
     ctx.textAlign = col.align === 'left' ? 'left' : 'center'
     ctx.textBaseline = 'middle'
-    ctx.fillText(col.label, col.align === 'left' ? col.x + 6 : col.x + col.w / 2, tY + COL_H / 2)
+    ctx.fillText(col.label, col.align === 'left' ? col.x + 8 : col.x + col.w / 2, tY + COL_H / 2)
   })
 
   // Filas
@@ -136,24 +136,25 @@ async function generarTablaGenerica(board, config) {
     ctx.textBaseline = 'middle'
 
     ctx.fillStyle = '#1a1a1a'
-    ctx.font = 'bold 10px Arial'
+    ctx.font = 'bold 11px Arial'
     ctx.textAlign = 'center'
     ctx.fillText(`${i+1}`, cols[0].x + cols[0].w/2, cy)
 
     const nombre = (p.nombre||'').toUpperCase()
-    const disp = nombre.length > 14 ? nombre.slice(0,14)+'…' : nombre
+    const disp = nombre.length > 15 ? nombre.slice(0,15)+'…' : nombre
+    ctx.font = 'bold 12px Arial'
     ctx.textAlign = 'left'
-    ctx.fillText(disp, cols[1].x + 6, cy)
+    ctx.fillText(disp, cols[1].x + 8, cy)
 
-    ctx.font = 'bold 14px Arial'
+    ctx.font = 'bold 15px Arial'
     ctx.textAlign = 'center'
     ctx.fillText(`${p.tot}`, cols[2].x + cols[2].w/2, cy)
 
     ctx.fillStyle = '#888888'
-    ctx.font = '9px Arial'
+    ctx.font = '10px Arial'
     ctx.fillText(`${p.jug}`, cols[3].x + cols[3].w/2, cy)
 
-    ctx.fillStyle = '#1a1a1a'; ctx.font = 'bold 10px Arial'
+    ctx.fillStyle = '#1a1a1a'; ctx.font = 'bold 11px Arial'
     ctx.fillText(`${p.ex}`,   cols[4].x + cols[4].w/2, cy)
     ctx.fillStyle = '#1a1a1a'
     ctx.fillText(`${p.lv}`,   cols[5].x + cols[5].w/2, cy)
@@ -161,7 +162,7 @@ async function generarTablaGenerica(board, config) {
     ctx.fillText(`${p.fail}`, cols[6].x + cols[6].w/2, cy)
 
     const pct = p.jug > 0 ? ((p.tot/(p.jug*3))*100).toFixed(2)+' %' : '-'
-    ctx.fillStyle = '#555555'; ctx.font = '9px Arial'
+    ctx.fillStyle = '#555555'; ctx.font = '10px Arial'
     ctx.fillText(pct, cols[7].x + cols[7].w/2, cy)
   })
 
