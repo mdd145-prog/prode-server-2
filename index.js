@@ -256,7 +256,14 @@ async function handleMessage(sock, msg) {
   const sendImage = async (buf, cap) => await sock.sendMessage(respondTo, { image: buf, caption: cap, mimetype: 'image/png' })
 
   try {
-    if (senderIsAdmin && texto === '!tabla') {
+    if (texto === '!tabla') {
+      // Abierto a todos, pero durante la ventana de un partido solo lo puede pedir
+      // el admin; al resto se lo ignora en silencio (la tabla ya se postea sola con
+      // cada gol/fin). Ventana = [kickoff−20min, kickoff+2h40] (la misma del poll).
+      if (!senderIsAdmin) {
+        const { data: ph } = await supabase.from('partidos').select('fecha,hora').not('hora', 'is', null)
+        if (enVentanaPartido(ph || [], Date.now())) return
+      }
       await verificarPartidosEnVivo(false)
       const board = await buildBoard()
       if (!board.length) { await sendText('No hay datos aún'); return }
@@ -306,11 +313,12 @@ async function handleMessage(sock, msg) {
     else if (texto === '!ayuda' || texto === 'hola' || texto === 'ping') {
       await sendText(
         `🤖 *Prode Mundial 2026 — Comandos:*\n\n` +
+        `!tabla → Tabla actual (solo fuera del horario de partidos)\n` +
         `!hoy → Partidos de hoy + pronósticos\n` +
         `!dia YYYY-MM-DD → Partidos de una fecha\n` +
         `!chances → Quién sigue en carrera\n` +
         `!ayuda → Este mensaje\n\n` +
-        `_La tabla se manda automáticamente cuando hay un gol o termina un partido._`
+        `_Durante los partidos la tabla se manda automáticamente con cada gol y al final, así que !tabla queda en pausa hasta que terminen._`
       )
     }
     else if (senderIsAdmin && texto === '!admin') {
@@ -333,7 +341,7 @@ async function handleMessage(sock, msg) {
     else if (senderIsAdmin && texto === '!ayuda_admin') {
       await sendText(
         `📖 *Ayuda admin — qué hace cada comando:*\n\n` +
-        `*!tabla* → Tabla NO oficial actual (con parcial si hay partidos en vivo). En privado vuelve a vos; en el grupo va al grupo.\n\n` +
+        `*!tabla* → Tabla NO oficial actual (con parcial si hay partidos en vivo). Ahora la puede pedir cualquiera, pero durante la ventana de un partido [20min antes → 2h40 después] solo vos; al resto se lo ignora. En privado vuelve a vos; en el grupo va al grupo.\n\n` +
         `*!oficial* → Tabla OFICIAL. Desde el grupo se publica al grupo con caption; desde privado te llega a vos como preview.\n\n` +
         `*!forzar* → Fuerza el envío de la Tabla Oficial al grupo (útil si quedó algo a medias).\n\n` +
         `*!resumen* → Manda al grupo la grilla del día con todos los pronósticos.\n\n` +
@@ -769,16 +777,28 @@ const POLL_LENTO   = 30 * 60 * 1000
 const VENTANA_PRE  = 20  * 60 * 1000        // 20 min antes del kickoff
 const VENTANA_POST = 160 * 60 * 1000        // 2h40 después del kickoff
 
+// ¿La hora `ahora` (epoch ms) cae dentro de la ventana [kickoff−20min, kickoff+2h40]
+// de algún partido? Define "horario de partidos" para el poll y para !tabla.
+function enVentanaPartido(partidos, ahora) {
+  for (const p of partidos || []) {
+    if (!p.hora || !p.fecha) continue
+    const ko = Date.parse(`${p.fecha}T${p.hora}:00-03:00`)
+    if (Number.isNaN(ko)) continue
+    if (ahora >= ko - VENTANA_PRE && ahora <= ko + VENTANA_POST) return true
+  }
+  return false
+}
+
 // Decide cuánto esperar hasta el próximo poll, mirando los horarios del fixture.
 // Pura (sin I/O) para poder testearla. `ahora` y los kickoffs en epoch ms.
 function decidirDelayPoll(partidos, ahora) {
+  if (enVentanaPartido(partidos, ahora)) return POLL_RAPIDO     // dentro de una ventana
   let proxInicio = Infinity
   for (const p of partidos || []) {
     if (!p.hora || !p.fecha) continue
     const ko = Date.parse(`${p.fecha}T${p.hora}:00-03:00`)
     if (Number.isNaN(ko)) continue
-    const ini = ko - VENTANA_PRE, fin = ko + VENTANA_POST
-    if (ahora >= ini && ahora <= fin) return POLL_RAPIDO       // dentro de una ventana
+    const ini = ko - VENTANA_PRE
     if (ini > ahora && ini < proxInicio) proxInicio = ini       // próxima ventana futura
   }
   // Fuera de ventana: 30min, salvo que la próxima ventana empiece antes.
