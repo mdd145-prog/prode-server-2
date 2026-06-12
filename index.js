@@ -9,6 +9,8 @@ const { createClient } = require('@supabase/supabase-js')
 const axios = require('axios')
 const { generarTablaImagen, generarImagenDia, generarTablaProba, generarTablaChances } = require('./tablaImagen')
 const arnaldo = require('./arnaldo')
+const { proyeccionTexto } = require('./proyeccion')
+const { probaHoyTexto } = require('./proba_hoy')
 
 const app = express()
 app.use(express.json())
@@ -289,14 +291,22 @@ async function handleMessage(sock, msg) {
       const img = await generarTablaChances(board, partidos || [])
       await sendImage(img, '')
     }
-    // !proba desactivado temporalmente
-    // else if (texto === '!proba') { ... }
+    else if (texto === '!proba') {
+      const odds = await getOdds()
+      await sendText(await proyeccionTexto(odds))
+    }
+    else if (texto === '!proba_hoy') {
+      const odds = await getOdds()
+      await sendText(await probaHoyTexto(odds, hoyARG()))
+    }
     else if (texto === '!ayuda' || texto === 'hola' || texto === 'ping') {
       await sendText(
         `🤖 *Prode Mundial 2026 — Comandos:*\n\n` +
         `!hoy → Partidos de hoy + pronósticos\n` +
         `!dia YYYY-MM-DD → Partidos de una fecha\n` +
         `!chances → Quién sigue en carrera\n` +
+        `!proba → Probabilidades de ganar (cuotas reales)\n` +
+        `!proba_hoy → Línea del día + qué hizo cada uno\n` +
         `!ayuda → Este mensaje\n\n` +
         `_La tabla se manda automáticamente cuando hay un gol o termina un partido._`
       )
@@ -424,10 +434,10 @@ let oddsCache = { data: null, ts: 0 }
 async function getOdds() {
   if (!process.env.ODDS_API_KEY) return []
   const now = Date.now()
-  if (oddsCache.data && now - oddsCache.ts < 3600000) return oddsCache.data
+  if (oddsCache.data && now - oddsCache.ts < 10800000) return oddsCache.data  // cache 3h (cuota 500/mes)
   try {
     const res = await axios.get('https://api.the-odds-api.com/v4/sports/soccer_fifa_world_cup/odds/', {
-      params: { apiKey: process.env.ODDS_API_KEY, regions: 'eu', markets: 'h2h', dateFormat: 'iso' },
+      params: { apiKey: process.env.ODDS_API_KEY, regions: 'eu', markets: 'h2h,totals', dateFormat: 'iso' },
       timeout: 10000
     })
     oddsCache = { data: res.data || [], ts: now }
