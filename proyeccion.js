@@ -69,12 +69,15 @@ async function simBoard(oddsData, scopeRows){
   const lam=pend.map(r=>{const[t1,t2]=teamsOf(matches[r]);const o=odds[[t1,t2].sort().join('|')]
     if(!o)return [1.3,1.3]; return o.home===t1?[o.lh,o.la]:[o.la,o.lh]})
   const SIM = pend.length ? 20000 : 1
-  const tot=new Array(N).fill(0), wins=new Array(N).fill(0)
+  const wins=new Array(N).fill(0)
+  const hist=Array.from({length:N},()=>({}))   // distribución de puntos por jugador
   for(let s=0;s<SIM;s++){const sc=lock.slice()
     for(let i=0;i<pend.length;i++){const r=pend[i],res=[pois(lam[i][0]),pois(lam[i][1])];for(let c=0;c<N;c++)sc[c]+=pts(data[c][r],res)}
-    for(let c=0;c<N;c++)tot[c]+=sc[c]
+    for(let c=0;c<N;c++) hist[c][sc[c]]=(hist[c][sc[c]]||0)+1
     const mx=Math.max(...sc),w=[];for(let c=0;c<N;c++)if(sc[c]===mx)w.push(c);for(const x of w)wins[x]+=1/w.length}
-  const rows=NAMES.map((n,c)=>({nombre:n,winPct:+(100*wins[c]/SIM).toFixed(1),expectedPts:Math.round(tot[c]/SIM*10)/10,currentPts:lock[c],cuota:wins[c]>0?+(SIM/wins[c]).toFixed(1):999})).sort((a,b)=>b.winPct-a.winPct||b.expectedPts-a.expectedPts)
+  // PROY = puntos MÁS PROBABLES (la moda de la distribución), no el promedio
+  const moda=c=>{let best=0,bv=-1;for(const k in hist[c]){if(hist[c][k]>bv){bv=hist[c][k];best=+k}}return best}
+  const rows=NAMES.map((n,c)=>({nombre:n,winPct:+(100*wins[c]/SIM).toFixed(1),expectedPts:moda(c),currentPts:lock[c],cuota:wins[c]>0?+(SIM/wins[c]).toFixed(1):999})).sort((a,b)=>b.winPct-a.winPct||b.expectedPts-a.expectedPts)
   return {rows, played:played.length, scope:scope.length, conOdds:Object.keys(odds).length, sims:SIM}
 }
 

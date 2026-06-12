@@ -290,11 +290,11 @@ async function handleMessage(sock, msg) {
       const img = await generarTablaChances(board, partidos || [])
       await sendImage(img, '')
     }
-    else if (texto === '!proba') {
+    else if (senderIsAdmin && texto === '!proba') {
       const odds = await getOdds()
       await sendImage(await generarProbaImg(odds), '')
     }
-    else if (texto === '!proba_hoy') {
+    else if (senderIsAdmin && texto === '!proba_hoy') {
       const odds = await getOdds()
       const img = await generarProbaHoyImg(odds, hoyARG())
       if (img) await sendImage(img, ''); else await sendText('No hay partidos hoy')
@@ -305,8 +305,6 @@ async function handleMessage(sock, msg) {
         `!hoy → Partidos de hoy + pronósticos\n` +
         `!dia YYYY-MM-DD → Partidos de una fecha\n` +
         `!chances → Quién sigue en carrera\n` +
-        `!proba → Probabilidades de ganar (cuotas reales)\n` +
-        `!proba_hoy → Línea del día + qué hizo cada uno\n` +
         `!ayuda → Este mensaje\n\n` +
         `_La tabla se manda automáticamente cuando hay un gol o termina un partido._`
       )
@@ -321,7 +319,7 @@ async function handleMessage(sock, msg) {
         await sendImage(img, '')
       } else {
         // Desde el grupo → manda al grupo
-        await enviarImagenAlGrupo(img, '')
+        await enviarImagenAlGrupo(img, arnaldo.captionOficial())
       }
     }
     else if (senderIsAdmin && texto === '!resumen') {
@@ -339,7 +337,7 @@ async function handleMessage(sock, msg) {
       if (!groupId) { await sendText('❌ GROUP_ID no configurado'); return }
       const board = await buildBoard()
       const img   = await generarTablaImagen(board, 'oficial')
-      await enviarImagenAlGrupo(img, '')
+      await enviarImagenAlGrupo(img, arnaldo.captionOficial())
       if (isPrivateAdmin) await sendText('✅ Tabla enviada al grupo')
     }
     else if (senderIsAdmin && texto === '!novedades') {
@@ -645,7 +643,7 @@ async function verificarPartidosEnVivo(forzar = false) {
             try {
               const board = await buildBoard()
               const img   = await generarTablaImagen(board, 'oficial')
-              await enviarImagenAlGrupo(img, '')
+              await enviarImagenAlGrupo(img, arnaldo.captionOficial())
             } catch(e) { console.error(e.message) }
           }, 1500)
         } else {

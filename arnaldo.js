@@ -67,11 +67,7 @@ const INTROS_ANALISIS = [
 
 // ── CAPTIONS DE IMÁGENES ──────────────────────────────────
 const CAPTIONS_OFICIAL = [
-  `📊 Tabla oficial actualizada.`,
-  `📊 Acá va la tabla oficial. Suerte a todos.`,
-  `📊 Tabla oficial al día. Cualquier consulta, !ayuda.`,
-  `📊 Posiciones oficiales actualizadas.`,
-  ``,
+  `📊 *Tabla Oficial*`,
 ]
 
 const CAPTIONS_DIA = [`*Partidos del Día*`]

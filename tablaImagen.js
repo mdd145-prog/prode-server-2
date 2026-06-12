@@ -208,16 +208,16 @@ async function generarTablaNoOficial(board, jugados = 0, liveMatches = []) {
 async function generarImagenDia(partidos, jugadores, pronosticos, fecha) {
   // ordenar columnas por hora del partido (solo presentación, no toca datos)
   partidos = [...partidos].sort((a, b) => (a.hora || '').localeCompare(b.hora || ''))
-  const M        = 20
+  const M        = 16
   const GAP      = 12
   const nM       = partidos.length
-  const nameW    = 90
-  const matchW   = nM <= 4 ? 58 : nM <= 6 ? 50 : 44
-  const TITLE_H  = 38
-  const DATE_H   = 46
-  const CTRY_H   = 32
-  const RES_H    = 28
-  const ROW_H    = 26
+  const nameW    = 132
+  const matchW   = nM <= 4 ? 66 : nM <= 6 ? 56 : 48
+  const TITLE_H  = 42
+  const DATE_H   = 48
+  const CTRY_H   = 34
+  const RES_H    = 30
+  const ROW_H    = 30
   const FOOTER_H = 0
 
   const tableW = nameW + nM * matchW + 28
@@ -236,14 +236,16 @@ async function generarImagenDia(partidos, jugadores, pronosticos, fecha) {
   ctx.translate(M, M)
 
   // Título flotante
-  ctx.fillStyle = '#3d0070'
-  roundRect(ctx, 0, 0, tableW, TITLE_H, 8)
+  const tgrad = ctx.createLinearGradient(0, 0, tableW, TITLE_H)
+  tgrad.addColorStop(0, '#3d0070'); tgrad.addColorStop(1, '#5b21b6')
+  ctx.fillStyle = tgrad
+  roundRect(ctx, 0, 0, tableW, TITLE_H, 9)
   ctx.fill()
   ctx.fillStyle = '#ffffff'
-  ctx.font = 'bold 12px Arial'
+  ctx.font = 'bold 18px Arial'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  ctx.fillText('R E S U L T A D O S', tableW/2, TITLE_H/2)
+  ctx.fillText('RESULTADOS DEL DÍA', tableW/2, TITLE_H/2)
 
   const tY = TITLE_H + GAP
   const fmtFecha = fecha ? new Date(fecha+'T12:00:00').toLocaleDateString('es-AR',{day:'numeric',month:'short'}).toUpperCase() : ''
@@ -252,7 +254,7 @@ async function generarImagenDia(partidos, jugadores, pronosticos, fecha) {
   ctx.fillStyle = '#f0e8ff'
   ctx.fillRect(0, tY, 14 + nameW, DATE_H + CTRY_H)
   ctx.fillStyle = '#3d0070'
-  ctx.font = 'bold 16px Arial'
+  ctx.font = 'bold 18px Arial'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
   ctx.fillText(fmtFecha, (14 + nameW)/2, tY + (DATE_H + CTRY_H)/2)
@@ -265,7 +267,7 @@ async function generarImagenDia(partidos, jugadores, pronosticos, fecha) {
     ctx.fillStyle = '#6d28d9'
     ctx.fillRect(14 + nameW + j*matchW, tY + DATE_H, matchW, CTRY_H)
     ctx.fillStyle = '#ffffff'
-    ctx.font = 'bold 9px Arial'
+    ctx.font = 'bold 11px Arial'
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
     ctx.fillText(abbr(p.equipo1), cx, tY + DATE_H/2)
@@ -277,13 +279,13 @@ async function generarImagenDia(partidos, jugadores, pronosticos, fecha) {
   ctx.fillStyle = '#ddd0f5'
   ctx.fillRect(0, resY, tableW, RES_H)
   ctx.fillStyle = '#3d0070'
-  ctx.font = 'bold 9px Arial'
+  ctx.font = 'bold 10px Arial'
   ctx.textAlign = 'left'
   ctx.textBaseline = 'middle'
   ctx.fillText('RESULTADO', 18, resY + RES_H/2)
   partidos.forEach((p, j) => {
     ctx.textAlign = 'center'
-    ctx.font = 'bold 11px Arial'
+    ctx.font = 'bold 13px Arial'
     ctx.fillText(p.goles1!==null?`${p.goles1}-${p.goles2}`:'-', 14+nameW+j*matchW+matchW/2, resY+RES_H/2)
   })
 
@@ -295,12 +297,13 @@ async function generarImagenDia(partidos, jugadores, pronosticos, fecha) {
     const cy = y + ROW_H/2
     const num = String(ji+1).padStart(2,' ')
     const nombre = (jug.nombre||'').toUpperCase()
-    const disp = nombre.length > 9 ? nombre.slice(0,9)+'…' : nombre
+    const disp = nombre.length > 13 ? nombre.slice(0,13)+'…' : nombre
     ctx.fillStyle = '#1a1a1a'
-    ctx.font = '10px Arial'
+    ctx.font = 'bold 12px Arial'
     ctx.textAlign = 'left'
     ctx.textBaseline = 'middle'
     ctx.fillText(`${num} ${disp}`, 18, cy)
+    ctx.font = '12px Arial'
     partidos.forEach((p, pi) => {
       const pred = pronosticos?.find(pr=>pr.jugador_id===jug.id&&pr.partido_id===p.id)
       const txt  = pred&&pred.goles1!==null?`${pred.goles1}-${pred.goles2}`:'-'
