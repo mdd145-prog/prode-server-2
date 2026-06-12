@@ -9,8 +9,7 @@ const { createClient } = require('@supabase/supabase-js')
 const axios = require('axios')
 const { generarTablaImagen, generarImagenDia, generarTablaProba, generarTablaChances } = require('./tablaImagen')
 const arnaldo = require('./arnaldo')
-const { proyeccionTexto } = require('./proyeccion')
-const { probaHoyTexto } = require('./proba_hoy')
+const { generarProbaImg, generarProbaHoyImg, generarReporteAgrupado } = require('./reporteDiario')
 
 const app = express()
 app.use(express.json())
@@ -293,11 +292,12 @@ async function handleMessage(sock, msg) {
     }
     else if (texto === '!proba') {
       const odds = await getOdds()
-      await sendText(await proyeccionTexto(odds))
+      await sendImage(await generarProbaImg(odds), '')
     }
     else if (texto === '!proba_hoy') {
       const odds = await getOdds()
-      await sendText(await probaHoyTexto(odds, hoyARG()))
+      const img = await generarProbaHoyImg(odds, hoyARG())
+      if (img) await sendImage(img, ''); else await sendText('No hay partidos hoy')
     }
     else if (texto === '!ayuda' || texto === 'hola' || texto === 'ping') {
       await sendText(
@@ -431,17 +431,27 @@ let warmupHecho = false
 // ── Odds API (cache 1 hora) ───────────────────────────────
 let oddsCache = { data: null, ts: 0 }
 
+const ODDS_TTL = 21600000  // 6h — con 2 créditos/llamada da ~240/mes, lejos del límite de 500
 async function getOdds() {
   if (!process.env.ODDS_API_KEY) return []
   const now = Date.now()
-  if (oddsCache.data && now - oddsCache.ts < 10800000) return oddsCache.data  // cache 3h (cuota 500/mes)
+  // 1) cache en memoria
+  if (oddsCache.data && now - oddsCache.ts < ODDS_TTL) return oddsCache.data
+  // 2) cache PERSISTENTE en Supabase — sobrevive los reinicios de Render (sin esto, cada
+  //    cold-start re-bajaba odds y drenaba la cuota). Falla en silencio si no existe la tabla.
+  try {
+    const { data: row } = await supabase.from('kv_cache').select('valor,ts').eq('clave', 'odds').maybeSingle()
+    if (row && now - Number(row.ts) < ODDS_TTL) { oddsCache = { data: row.valor, ts: Number(row.ts) }; return row.valor }
+  } catch(e) { /* tabla kv_cache no existe todavía: seguimos con fetch */ }
+  // 3) fetch real (2 créditos) y guardo en ambos caches
   try {
     const res = await axios.get('https://api.the-odds-api.com/v4/sports/soccer_fifa_world_cup/odds/', {
       params: { apiKey: process.env.ODDS_API_KEY, regions: 'eu', markets: 'h2h,totals', dateFormat: 'iso' },
       timeout: 10000
     })
     oddsCache = { data: res.data || [], ts: now }
-    console.log(`📊 Odds: ${oddsCache.data.length} partidos`)
+    supabase.from('kv_cache').upsert({ clave: 'odds', valor: res.data || [], ts: now }).then(() => {}, () => {})
+    console.log(`📊 Odds: ${oddsCache.data.length} partidos (fetch real, 2 créditos)`)
     return oddsCache.data
   } catch(e) { console.error('Error odds:', e.message); return oddsCache.data || [] }
 }
@@ -667,6 +677,22 @@ async function verificarPartidosEnVivo(forzar = false) {
           }, 1500)
         }
       }
+      // KICKOFF: arrancó el partido (antes goles==null) -> tabla parcial 0-0
+      else if (warmupHecho && cambio && state === 'in' && prev1 === null) {
+        await enviarAlGrupo(arnaldo.arranco(partido.equipo1, partido.equipo2))
+        console.log(`🟢 Arrancó: ${partido.equipo1} vs ${partido.equipo2}`)
+        setTimeout(async () => {
+          try {
+            const { data: pAll } = await supabase.from('partidos').select('id,goles1,fecha')
+            const hoyFecha = hoyARG()
+            const liveMatches = (pAll || []).filter(p => p.fecha === hoyFecha && p.goles1 !== null)
+            const jugados = (pAll || []).filter(p => p.goles1 !== null).length
+            const board = await buildBoard()
+            const img = await generarTablaImagen(board, 'nooficial', { jugados, liveMatches })
+            await enviarImagenAlGrupo(img, '')
+          } catch(e) { console.error(e.message) }
+        }, 1500)
+      }
     }
 
     // Cambio de líder en vivo (solo con punta en solitario, para no anunciar empates)
@@ -729,7 +755,8 @@ cron.schedule('*/5 * * * *', async () => {
     const { data: jugadores } = await supabase.from('jugadores').select('*').order('orden')
     const pronosticos = await fetchAllPronosticos()
     for (const p of proximos) {
-      await enviarAlGrupo(arnaldo.analisisPartido(p, jugadores || [], pronosticos || []))
+      const img = await generarReporteAgrupado(p, jugadores || [], pronosticos || [])
+      await enviarImagenAlGrupo(img, '')
     }
     console.log(`🍿 Análisis enviado: ${proximos.map(p => p.equipo1 + '-' + p.equipo2).join(', ')}`)
   } catch (e) { console.error('Error análisis previo:', e.message) }
@@ -750,6 +777,21 @@ cron.schedule('0 11 * * *', async () => {
     const img = await generarImagenDia(partidos, jugs || [], preds || [], hoy)
     await enviarImagenAlGrupo(img, arnaldo.captionDia())
   } catch(e) { console.error('Error cron 8am:', e.message) }
+})
+
+// Cron 8:01 ARG (11:01 UTC) — reportes proba (chances de HOY + del TORNEO), solo si hay partidos hoy
+cron.schedule('1 11 * * *', async () => {
+  try {
+    if (!process.env.GROUP_ID || !botSock) return
+    const hoy = hoyARG()
+    const { data: partidos } = await supabase.from('partidos').select('id').eq('fecha', hoy)
+    if (!partidos?.length) return
+    const odds = await getOdds()
+    const imgHoy = await generarProbaHoyImg(odds, hoy)
+    if (imgHoy) await enviarImagenAlGrupo(imgHoy, '')
+    await enviarImagenAlGrupo(await generarProbaImg(odds), '')
+    console.log('🎲 Reportes proba enviados (8:01)')
+  } catch(e) { console.error('Error cron 8:01 proba:', e.message) }
 })
 
 // ── Conexión WhatsApp (Baileys) ────────────────────────────

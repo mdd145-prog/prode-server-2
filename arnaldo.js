@@ -189,6 +189,8 @@ module.exports = {
 
   gol: (eq1, g1, eq2, g2) => `Gol: ${eq1} ${g1} ${eq2} ${g2}`,
 
+  arranco: (eq1, eq2) => `🟢 ¡Comienza *${eq1}* vs *${eq2}*! Acá va la tabla parcial (NO oficial), arranca 0-0:`,
+
   // ¿El texto menciona a Arnaldo por alguno de sus apodos?
   esMencion: texto => ALIAS_RE.test(texto),
 
