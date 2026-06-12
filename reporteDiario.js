@@ -92,14 +92,13 @@ async function generarProbaHoyImg(oddsData, date){
     lineas: res.map(r=> r.g1==null ? `${r.eq1}  vs  ${r.eq2}` : `${r.eq1}  ${r.g1} - ${r.g2}  ${r.eq2}`) } : null
   const W=524-32, f=`${date.slice(8,10)}/${date.slice(5,7)}`
   const cols=[
-    {x:0,   w:30, label:'#',       align:'center'},
-    {x:30,  w:214,label:'JUGADOR', align:'left',  val:r=>nameUp(r.nombre), bold:true, size:12},
-    {x:244, w:82, label:'GANAR %', align:'center',val:r=>`${r.winPct}%`, bold:true, size:13, color:r=>r.winPct>0?'#1a6b8a':'#bbb'},
-    {x:326, w:78, label:'HOY',     align:'center',val:r=>`${r.currentPts}`,bold:true,size:12},
-    {x:404, w:82, label:'PROY',    align:'center',val:r=>`${r.expectedPts}`,size:12, color:()=>'#e67e22'},
+    {x:0,   w:34, label:'#',          align:'center'},
+    {x:34,  w:280,label:'JUGADOR',    align:'left',  val:r=>nameUp(r.nombre), bold:true, size:13},
+    {x:314, w:90, label:'GANAR %',    align:'center',val:r=>`${r.winPct}%`, bold:true, size:13, color:r=>r.winPct>0?'#1a6b8a':'#bbb'},
+    {x:404, w:88, label:'PTS x RESULT', align:'center',val:r=>`${r.expectedPts}`,bold:true,size:13, color:()=>'#e67e22'},
   ]
   return tablaRanking({ titulo:`CHANCES DE GANAR HOY · ${f}`,
-    sub:`${b.scope} partido(s) del día`, banda,
+    sub:`PTS x RESULT = puntos si pasan los resultados de arriba`, banda,
     cols, rows:b.rows, g1:'#7c3aed', g2:'#5b21b6', rowA:'#f5f0ff', rowB:'#ece3fb' })
 }
 

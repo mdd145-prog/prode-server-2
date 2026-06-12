@@ -10,6 +10,7 @@ const axios = require('axios')
 const { generarTablaImagen, generarImagenDia, generarTablaProba, generarTablaChances } = require('./tablaImagen')
 const arnaldo = require('./arnaldo')
 const { generarProbaImg, generarProbaHoyImg, generarReporteAgrupado } = require('./reporteDiario')
+const PROBA_ACTIVO = false   // !proba / !proba_hoy + cron 8:01 desactivados hasta que estén listos
 
 const app = express()
 app.use(express.json())
@@ -290,11 +291,11 @@ async function handleMessage(sock, msg) {
       const img = await generarTablaChances(board, partidos || [])
       await sendImage(img, '')
     }
-    else if (senderIsAdmin && texto === '!proba') {
+    else if (PROBA_ACTIVO && senderIsAdmin && texto === '!proba') {
       const odds = await getOdds()
       await sendImage(await generarProbaImg(odds), '')
     }
-    else if (senderIsAdmin && texto === '!proba_hoy') {
+    else if (PROBA_ACTIVO && senderIsAdmin && texto === '!proba_hoy') {
       const odds = await getOdds()
       const img = await generarProbaHoyImg(odds, hoyARG())
       if (img) await sendImage(img, ''); else await sendText('No hay partidos hoy')
@@ -780,6 +781,7 @@ cron.schedule('0 11 * * *', async () => {
 // Cron 8:01 ARG (11:01 UTC) — reportes proba (chances de HOY + del TORNEO), solo si hay partidos hoy
 cron.schedule('1 11 * * *', async () => {
   try {
+    if (!PROBA_ACTIVO) return   // desactivado hasta que los reportes proba estén listos
     if (!process.env.GROUP_ID || !botSock) return
     const hoy = hoyARG()
     const { data: partidos } = await supabase.from('partidos').select('id').eq('fecha', hoy)

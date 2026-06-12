@@ -104,7 +104,25 @@ async function proyeccionTexto(oddsData){
   return L.join('\n')
 }
 
-module.exports = { simBoard, proyeccionBoard, proyeccionTexto, buildLambdas, rowsForDate, resultadosDelDia }
+// Puntos que sacaría cada jugador SI pasan los resultados más probables del mercado
+// (o el resultado real, si el partido ya se jugó). Devuelve { nombre: puntos }.
+async function puntosModales(oddsData, date){
+  const odds=buildLambdas(oddsData)
+  const {data:ps}=await supabase.from('partidos').select('*').eq('fecha',date)
+  const real={}; for(const p of (ps||[])) if(p.goles1!==null) real[esAb(p.equipo1)+'·'+esAb(p.equipo2)]=[p.goles1,p.goles2]
+  const rows=await rowsForDate(date)
+  const out={}; NAMES.forEach(n=>out[n]=0)
+  for(const r of rows){
+    const [t1,t2]=teamsOf(matches[r])
+    let modal=real[keyOf(matches[r])]
+    if(!modal){ const o=odds[[t1,t2].sort().join('|')]; if(!o) continue
+      const [l1,l2]=o.home===t1?[o.lh,o.la]:[o.la,o.lh]; modal=[Math.floor(l1),Math.floor(l2)] }
+    for(let c=0;c<N;c++) out[NAMES[c]]+=pts(data[c][r],modal)
+  }
+  return out
+}
+
+module.exports = { simBoard, proyeccionBoard, proyeccionTexto, buildLambdas, rowsForDate, resultadosDelDia, puntosModales }
 
 // --- CLI standalone ---
 if (require.main === module) {

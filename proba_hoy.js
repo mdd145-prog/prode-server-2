@@ -1,12 +1,16 @@
 // !proba_hoy — chances de ganar EL DÍA: quién saca más puntos en los partidos de hoy.
 // Mismo formato que !proba pero scope = fecha. Exporta probaHoyBoard(oddsData, date).
 require('dotenv').config()
-const { simBoard, rowsForDate } = require('./proyeccion')
+const { simBoard, rowsForDate, puntosModales } = require('./proyeccion')
 
 async function probaHoyBoard(oddsData, date){
   const rows = await rowsForDate(date)
   if (!rows.length) return null                 // no hay partidos ese día
-  return simBoard(oddsData, rows)
+  const board = await simBoard(oddsData, rows)
+  // PROY del día = puntos si pasan los resultados más probables del mercado
+  const modal = await puntosModales(oddsData, date)
+  board.rows.forEach(r => { r.expectedPts = modal[r.nombre] ?? 0 })
+  return board
 }
 
 async function probaHoyTexto(oddsData, date){
