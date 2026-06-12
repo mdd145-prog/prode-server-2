@@ -10,7 +10,8 @@ const axios = require('axios')
 const { generarTablaImagen, generarImagenDia, generarTablaProba, generarTablaChances } = require('./tablaImagen')
 const arnaldo = require('./arnaldo')
 const { generarProbaImg, generarProbaHoyImg, generarReporteAgrupado } = require('./reporteDiario')
-const PROBA_ACTIVO = false   // !proba / !proba_hoy + cron 8:01 desactivados hasta que estén listos
+const PROBA_ACTIVO = true       // !proba / !proba_hoy habilitados (solo admin, ver senderIsAdmin)
+const PROBA_CRON_ACTIVO = false  // cron 8:01 que difunde al grupo: apagado hasta que esté listo
 
 const app = express()
 app.use(express.json())
@@ -781,7 +782,7 @@ cron.schedule('0 11 * * *', async () => {
 // Cron 8:01 ARG (11:01 UTC) — reportes proba (chances de HOY + del TORNEO), solo si hay partidos hoy
 cron.schedule('1 11 * * *', async () => {
   try {
-    if (!PROBA_ACTIVO) return   // desactivado hasta que los reportes proba estén listos
+    if (!PROBA_CRON_ACTIVO) return   // difusión al grupo desactivada (proba es solo admin por ahora)
     if (!process.env.GROUP_ID || !botSock) return
     const hoy = hoyARG()
     const { data: partidos } = await supabase.from('partidos').select('id').eq('fecha', hoy)
