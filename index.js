@@ -756,8 +756,45 @@ async function verificarPartidosEnVivo(forzar = false) {
 }
 
 
-// Polling cada 30s — ESPN es gratis y soporta esta frecuencia sin problemas
-setInterval(() => { verificarPartidosEnVivo().catch(e => console.error('poll err:', e.message)) }, 30000)
+// ── Polling adaptativo a ESPN ──────────────────────────────
+// Dos velocidades para no machacar ESPN todo el día:
+//   • 12s   si la hora actual cae dentro de la ventana de algún partido:
+//           [kickoff − 20min, kickoff + 2h40]  (cubre arranque, 90' + entretiempo,
+//           alargue y penales de eliminatorias, y un colchón al final).
+//   • 30min si no hay ningún partido cerca — pero despertando antes si la próxima
+//           ventana empieza en menos de 30min, para no comerse el arranque.
+// ARG es UTC-3 fijo (sin horario de verano), por eso el offset literal -03:00.
+const POLL_RAPIDO  = 12 * 1000
+const POLL_LENTO   = 30 * 60 * 1000
+const VENTANA_PRE  = 20  * 60 * 1000        // 20 min antes del kickoff
+const VENTANA_POST = 160 * 60 * 1000        // 2h40 después del kickoff
+
+// Decide cuánto esperar hasta el próximo poll, mirando los horarios del fixture.
+// Pura (sin I/O) para poder testearla. `ahora` y los kickoffs en epoch ms.
+function decidirDelayPoll(partidos, ahora) {
+  let proxInicio = Infinity
+  for (const p of partidos || []) {
+    if (!p.hora || !p.fecha) continue
+    const ko = Date.parse(`${p.fecha}T${p.hora}:00-03:00`)
+    if (Number.isNaN(ko)) continue
+    const ini = ko - VENTANA_PRE, fin = ko + VENTANA_POST
+    if (ahora >= ini && ahora <= fin) return POLL_RAPIDO       // dentro de una ventana
+    if (ini > ahora && ini < proxInicio) proxInicio = ini       // próxima ventana futura
+  }
+  // Fuera de ventana: 30min, salvo que la próxima ventana empiece antes.
+  return Math.min(POLL_LENTO, Math.max(POLL_RAPIDO, proxInicio - ahora))
+}
+
+async function cicloPoll() {
+  try { await verificarPartidosEnVivo() } catch (e) { console.error('poll err:', e.message) }
+  let delay = POLL_LENTO   // fallback ante cualquier error de scheduling
+  try {
+    const { data: ps } = await supabase.from('partidos').select('fecha,hora').not('hora', 'is', null)
+    delay = decidirDelayPoll(ps || [], Date.now())
+  } catch (e) { console.error('poll sched err:', e.message) }
+  setTimeout(cicloPoll, delay)
+}
+cicloPoll()
 
 // Análisis previo: 20 min antes de cada partido, Arnaldo manda los pronósticos agrupados por marcador.
 // Incluye partidos de mañana (00:00 ARG cuenta como "mañana" en la DB).
