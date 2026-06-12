@@ -75,8 +75,8 @@ async function generarProbaImg(oddsData){
   const cols=[
     {x:0,   w:30, label:'#',       align:'center'},
     {x:30,  w:176,label:'JUGADOR', align:'left',  val:r=>nameUp(r.nombre), bold:true, size:12},
-    {x:206, w:74, label:'GANAR %', align:'center',val:r=>`${r.winPct}%`,  bold:true, size:13, color:()=>'#1a6b8a'},
-    {x:280, w:66, label:'CUOTA',   align:'center',val:r=>`${r.cuota}`,    size:11, color:()=>'#999'},
+    {x:206, w:74, label:'GANAR %', align:'right', val:r=>`${r.winPct.toFixed(2)}%`,  bold:true, size:13, color:()=>'#1a6b8a'},
+    {x:280, w:66, label:'CUOTA',   align:'right', val:r=>`${r.cuota.toFixed(2)}`,    size:11, color:()=>'#999'},
     {x:346, w:66, label:'HOY',     align:'center',val:r=>`${r.currentPts}`,bold:true,size:12},
     {x:412, w:80, label:'PROY',    align:'center',val:r=>`${r.expectedPts}`,size:12, color:()=>'#e67e22'},
   ]
@@ -97,7 +97,7 @@ async function generarProbaHoyImg(oddsData, date){
     {x:264, w:110,label:'HOY',     align:'center',val:r=>`${r.hoy>0?'+':''}${r.hoy}`, bold:true, size:13, color:r=>r.hoy>0?'#e67e22':'#bbb'},
     {x:374, w:118,label:'TOTAL',   align:'center',val:r=>`${r.total}`, bold:true, size:15, color:()=>'#1a6b8a'},
   ]
-  return tablaRanking({ titulo:`CÓMO QUEDA LA TABLA HOY · ${f}`,
+  return tablaRanking({ titulo:`CÓMO QUEDARÍA LA TABLA HOY · ${f}`,
     sub:`tabla general si los partidos de hoy terminan según los resultados de arriba`, banda,
     cols, rows:b.rows, g1:'#7c3aed', g2:'#5b21b6', rowA:'#f5f0ff', rowB:'#ece3fb' })
 }

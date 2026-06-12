@@ -311,6 +311,39 @@ async function handleMessage(sock, msg) {
         `_La tabla se manda automáticamente cuando hay un gol o termina un partido._`
       )
     }
+    else if (senderIsAdmin && texto === '!admin') {
+      await sendText(
+        `🛠️ *Comandos de admin:*\n\n` +
+        `!tabla\n` +
+        `!oficial\n` +
+        `!forzar\n` +
+        `!resumen\n` +
+        `!novedades\n` +
+        `!proba\n` +
+        `!proba_hoy\n` +
+        `!resultado E1 g1 E2 g2\n` +
+        `!sync\n` +
+        `!estado\n` +
+        `!test on / !test off\n\n` +
+        `_!ayuda_admin → explicación de cada uno._`
+      )
+    }
+    else if (senderIsAdmin && texto === '!ayuda_admin') {
+      await sendText(
+        `📖 *Ayuda admin — qué hace cada comando:*\n\n` +
+        `*!tabla* → Tabla NO oficial actual (con parcial si hay partidos en vivo). En privado vuelve a vos; en el grupo va al grupo.\n\n` +
+        `*!oficial* → Tabla OFICIAL. Desde el grupo se publica al grupo con caption; desde privado te llega a vos como preview.\n\n` +
+        `*!forzar* → Fuerza el envío de la Tabla Oficial al grupo (útil si quedó algo a medias).\n\n` +
+        `*!resumen* → Manda al grupo la grilla del día con todos los pronósticos.\n\n` +
+        `*!novedades* → Manda al grupo el mensaje de novedades con el link a la web.\n\n` +
+        `*!proba* → Chances de ganar el torneo: Monte Carlo con cuotas reales del mercado (GANAR%, CUOTA, HOY, PROY).\n\n` +
+        `*!proba_hoy* → Cómo quedaría la tabla hoy si pasan los resultados más probables del mercado.\n\n` +
+        `*!resultado E1 g1 E2 g2* → Carga manual de un resultado. Ej: !resultado Argentina 2 Francia 1.\n\n` +
+        `*!sync* → Sincroniza partidos en vivo desde ESPN.\n\n` +
+        `*!estado* → Diagnóstico: jugadores, partidos jugados, GROUP_ID, fuente, modo TEST.\n\n` +
+        `*!test on/off* → Modo TEST: redirige los envíos automáticos del grupo (gol, fin, tabla, cambio de líder) a vos en privado con prefijo [TEST].`
+      )
+    }
     else if (senderIsAdmin && texto === '!oficial') {
       await verificarPartidosEnVivo(false)
       const board = await buildBoard()
@@ -788,7 +821,8 @@ cron.schedule('1 11 * * *', async () => {
     const { data: partidos } = await supabase.from('partidos').select('id').eq('fecha', hoy)
     if (!partidos?.length) return
     const odds = await getOdds()
-    await enviarAlGrupo(arnaldo.tituloProba())                        // título solo
+    const fechaTit = `${hoy.slice(8,10)}/${hoy.slice(5,7)}`
+    await enviarAlGrupo(arnaldo.tituloProba(fechaTit))                 // título solo
     await enviarImagenAlGrupo(await generarProbaImg(odds), '')        // proba (torneo)
     const imgHoy = await generarProbaHoyImg(odds, hoy)
     if (imgHoy) await enviarImagenAlGrupo(imgHoy, '')                 // proba_hoy (tabla del día)

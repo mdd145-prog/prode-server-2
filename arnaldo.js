@@ -182,7 +182,7 @@ module.exports = {
   captionOficial: () => pick(CAPTIONS_OFICIAL),
 
   // Título del envío de las 8:01 (va solo, arriba de proba + proba_hoy)
-  tituloProba: () => `🎲 *Reportes de Probabilidades*`,
+  tituloProba: (fecha) => `🎲 *Líneas del día (${fecha})*`,
 
   captionDia: () => pick(CAPTIONS_DIA),
 

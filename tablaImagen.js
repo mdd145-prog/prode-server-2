@@ -216,13 +216,14 @@ async function generarImagenDia(partidos, jugadores, pronosticos, fecha) {
   const TITLE_H  = 42
   const DATE_H   = 48
   const CTRY_H   = 34
+  const HORA_H   = 18
   const RES_H    = 30
   const ROW_H    = 30
   const FOOTER_H = 0
 
   const tableW = nameW + nM * matchW + 28
   const W      = tableW + M * 2
-  const tableH = DATE_H + CTRY_H + RES_H + jugadores.length * ROW_H
+  const tableH = DATE_H + CTRY_H + HORA_H + RES_H + jugadores.length * ROW_H
   const H      = M + TITLE_H + GAP + tableH + M
 
   const canvas = createCanvas(W * S, H * S)
@@ -250,14 +251,14 @@ async function generarImagenDia(partidos, jugadores, pronosticos, fecha) {
   const tY = TITLE_H + GAP
   const fmtFecha = fecha ? new Date(fecha+'T12:00:00').toLocaleDateString('es-AR',{day:'numeric',month:'short'}).toUpperCase() : ''
 
-  // Celda fecha
+  // Celda fecha (cubre fila equipo1 + equipo2 + hora)
   ctx.fillStyle = '#f0e8ff'
-  ctx.fillRect(0, tY, 14 + nameW, DATE_H + CTRY_H)
+  ctx.fillRect(0, tY, 14 + nameW, DATE_H + CTRY_H + HORA_H)
   ctx.fillStyle = '#3d0070'
   ctx.font = 'bold 18px Arial'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  ctx.fillText(fmtFecha, (14 + nameW)/2, tY + (DATE_H + CTRY_H)/2)
+  ctx.fillText(fmtFecha, (14 + nameW)/2, tY + (DATE_H + CTRY_H + HORA_H)/2)
 
   // Headers países
   partidos.forEach((p, j) => {
@@ -274,8 +275,20 @@ async function generarImagenDia(partidos, jugadores, pronosticos, fecha) {
     ctx.fillText(abbr(p.equipo2), cx, tY + DATE_H + CTRY_H/2)
   })
 
+  // Fila hora del partido
+  const horaY = tY + DATE_H + CTRY_H
+  partidos.forEach((p, j) => {
+    ctx.fillStyle = '#5b21b6'
+    ctx.fillRect(14 + nameW + j*matchW, horaY, matchW, HORA_H)
+    ctx.fillStyle = '#ffffff'
+    ctx.font = 'bold 10px Arial'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(p.hora || '', 14+nameW+j*matchW+matchW/2, horaY + HORA_H/2)
+  })
+
   // Fila resultado
-  const resY = tY + DATE_H + CTRY_H
+  const resY = tY + DATE_H + CTRY_H + HORA_H
   ctx.fillStyle = '#ddd0f5'
   ctx.fillRect(0, resY, tableW, RES_H)
   ctx.fillStyle = '#3d0070'
