@@ -10,6 +10,7 @@ const axios = require('axios')
 const { generarTablaImagen, generarImagenDia, generarTablaProba, generarTablaChances } = require('./tablaImagen')
 const arnaldo = require('./arnaldo')
 const { generarProbaImg, generarProbaHoyImg, generarReporteAgrupado } = require('./reporteDiario')
+const { diaProdeARG, esDelDiaProde, partidosDelDia } = require('./dia')
 const PROBA_ACTIVO = true       // !proba / !proba_hoy habilitados (solo admin, ver senderIsAdmin)
 const PROBA_CRON_ACTIVO = true   // cron 8:01 ARG: difunde los reportes proba (HOY + torneo) al grupo
 
@@ -258,19 +259,19 @@ async function handleMessage(sock, msg) {
       await verificarPartidosEnVivo(false)
       const board = await buildBoard()
       if (!board.length) { await sendText('No hay datos aún'); return }
-      const hoyFecha = hoyARG()
+      const hoyFecha = diaProdeARG()
       const { data: pAll }  = await supabase.from('partidos').select('id,goles1')
-      const { data: pHoy }  = await supabase.from('partidos').select('*').eq('fecha', hoyFecha).not('goles1','is',null)
+      const pHoy = (await partidosDelDia(supabase, hoyFecha)).filter(p => p.goles1 !== null)
       const jugados = pAll?.filter(p => p.goles1 !== null).length || 0
-      const liveMatches = pHoy || []
+      const liveMatches = pHoy
       const img = await generarTablaImagen(board, 'nooficial', { jugados, liveMatches })
       if (isPrivateAdmin) await sendImage(img, '')
       else await enviarImagenAlGrupo(img, '')
     }
     else if (texto === '!hoy') {
-      const hoy = hoyARG()
-      const { data: pHoy }  = await supabase.from('partidos').select('*').eq('fecha', hoy)
-      if (!pHoy?.length) { await sendText(`No hay partidos hoy (${hoy})`); return }
+      const hoy = diaProdeARG()
+      const pHoy = await partidosDelDia(supabase, hoy)
+      if (!pHoy.length) { await sendText(`No hay partidos hoy (${hoy})`); return }
       const { data: jugs }  = await supabase.from('jugadores').select('*').order('orden')
       const preds = await fetchAllPronosticos()
       const img = await generarImagenDia(pHoy, jugs || [], preds || [], hoy)
@@ -278,8 +279,8 @@ async function handleMessage(sock, msg) {
     }
     else if (texto.startsWith('!dia ')) {
       const fecha = texto.replace('!dia ', '').trim()
-      const { data: pFecha } = await supabase.from('partidos').select('*').eq('fecha', fecha)
-      if (!pFecha?.length) { await sendText(`No hay partidos el ${fecha}`); return }
+      const pFecha = await partidosDelDia(supabase, fecha)
+      if (!pFecha.length) { await sendText(`No hay partidos el ${fecha}`); return }
       const { data: jugs }  = await supabase.from('jugadores').select('*').order('orden')
       const preds = await fetchAllPronosticos()
       const img = await generarImagenDia(pFecha, jugs || [], preds || [], fecha)
@@ -298,7 +299,7 @@ async function handleMessage(sock, msg) {
     }
     else if (PROBA_ACTIVO && senderIsAdmin && texto === '!proba_hoy') {
       const odds = await getOdds()
-      const img = await generarProbaHoyImg(odds, hoyARG())
+      const img = await generarProbaHoyImg(odds, diaProdeARG())
       if (img) await sendImage(img, ''); else await sendText('No hay partidos hoy')
     }
     else if (texto === '!ayuda' || texto === 'hola' || texto === 'ping') {
@@ -359,9 +360,9 @@ async function handleMessage(sock, msg) {
     }
     else if (senderIsAdmin && texto === '!resumen') {
       if (!groupId) { await sendText('❌ GROUP_ID no configurado'); return }
-      const hoy = hoyARG()
-      const { data: pHoy }  = await supabase.from('partidos').select('*').eq('fecha', hoy)
-      if (!pHoy?.length) { await sendText(`No hay partidos hoy (${hoy})`); return }
+      const hoy = diaProdeARG()
+      const pHoy = await partidosDelDia(supabase, hoy)
+      if (!pHoy.length) { await sendText(`No hay partidos hoy (${hoy})`); return }
       const { data: jugs }  = await supabase.from('jugadores').select('*').order('orden')
       const preds = await fetchAllPronosticos()
       const img = await generarImagenDia(pHoy, jugs || [], preds || [], hoy)
@@ -699,9 +700,9 @@ async function verificarPartidosEnVivo(forzar = false) {
           console.log(`⚽ Gol: ${partido.equipo1} ${g1}-${g2} ${partido.equipo2}`)
           setTimeout(async () => {
             try {
-              const { data: pAll } = await supabase.from('partidos').select('id,goles1,fecha')
-              const hoyFecha = hoyARG()
-              const liveMatches = (pAll || []).filter(p => p.fecha === hoyFecha && p.goles1 !== null)
+              const { data: pAll } = await supabase.from('partidos').select('id,goles1,fecha,hora')
+              const hoyFecha = diaProdeARG()
+              const liveMatches = (pAll || []).filter(p => esDelDiaProde(p, hoyFecha) && p.goles1 !== null)
               const jugados = (pAll || []).filter(p => p.goles1 !== null).length
               const board = await buildBoard()
               const img = await generarTablaImagen(board, 'nooficial', { jugados, liveMatches })
@@ -716,9 +717,9 @@ async function verificarPartidosEnVivo(forzar = false) {
         console.log(`🟢 Arrancó: ${partido.equipo1} vs ${partido.equipo2}`)
         setTimeout(async () => {
           try {
-            const { data: pAll } = await supabase.from('partidos').select('id,goles1,fecha')
-            const hoyFecha = hoyARG()
-            const liveMatches = (pAll || []).filter(p => p.fecha === hoyFecha && p.goles1 !== null)
+            const { data: pAll } = await supabase.from('partidos').select('id,goles1,fecha,hora')
+            const hoyFecha = diaProdeARG()
+            const liveMatches = (pAll || []).filter(p => esDelDiaProde(p, hoyFecha) && p.goles1 !== null)
             const jugados = (pAll || []).filter(p => p.goles1 !== null).length
             const board = await buildBoard()
             const img = await generarTablaImagen(board, 'nooficial', { jugados, liveMatches })
@@ -801,9 +802,9 @@ const WEB_URL = 'https://mdd145-prog.github.io/Prode-Mundial-2026-LVM/'
 // Cron 8am Argentina (11am UTC) — manda resumen del dia si hay partidos
 cron.schedule('0 11 * * *', async () => {
   try {
-    const hoy = hoyARG()
-    const { data: partidos } = await supabase.from('partidos').select('*').eq('fecha', hoy)
-    if (!partidos || partidos.length === 0) return
+    const hoy = diaProdeARG()
+    const partidos = await partidosDelDia(supabase, hoy)
+    if (partidos.length === 0) return
     console.log('Enviando resumen del dia:', hoy)
     const { data: jugs }  = await supabase.from('jugadores').select('*').order('orden')
     const preds = await fetchAllPronosticos()
@@ -817,9 +818,9 @@ cron.schedule('1 11 * * *', async () => {
   try {
     if (!PROBA_CRON_ACTIVO) return   // difusión al grupo desactivada (proba es solo admin por ahora)
     if (!process.env.GROUP_ID || !botSock) return
-    const hoy = hoyARG()
-    const { data: partidos } = await supabase.from('partidos').select('id').eq('fecha', hoy)
-    if (!partidos?.length) return
+    const hoy = diaProdeARG()
+    const partidos = await partidosDelDia(supabase, hoy, 'id')
+    if (!partidos.length) return
     const odds = await getOdds()
     const fechaTit = `${hoy.slice(8,10)}/${hoy.slice(5,7)}`
     await enviarAlGrupo(arnaldo.tituloProba(fechaTit))                 // título solo
@@ -986,9 +987,9 @@ app.get('/preview/nooficial', async (req, res) => {
 
 app.get('/preview/dia', async (req, res) => {
   try {
-    const fecha = req.query.fecha || hoyARG()
-    const { data: pHoy }  = await supabase.from('partidos').select('*').eq('fecha', fecha)
-    if (!pHoy?.length) return res.send(`No hay partidos el ${fecha}`)
+    const fecha = req.query.fecha || diaProdeARG()
+    const pHoy = await partidosDelDia(supabase, fecha)
+    if (!pHoy.length) return res.send(`No hay partidos el ${fecha}`)
     const { data: jugs }  = await supabase.from('jugadores').select('*').order('orden')
     const preds = await fetchAllPronosticos()
     const img = await generarImagenDia(pHoy, jugs || [], preds || [], fecha)

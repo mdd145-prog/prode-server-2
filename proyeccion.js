@@ -5,6 +5,7 @@
 require('dotenv').config()
 const { createClient } = require('@supabase/supabase-js')
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY)
+const { partidosDelDia } = require('./dia')
 const {NAMES,matches,data}=require('./pronosticos20.json')
 const N=NAMES.length, M=matches.length
 const EN2AB={'Algeria':'ALG','Argentina':'ARG','Australia':'AUS','Austria':'AUT','Belgium':'BEL','Bosnia & Herzegovina':'BIH','Brazil':'BRA','Canada':'CAN','Cape Verde':'CPV','Colombia':'COL','Croatia':'CRO','Curaçao':'CUW','Czech Republic':'CHE','DR Congo':'COD','Ecuador':'ECU','Egypt':'EGI','England':'ING','France':'FRA','Germany':'ALE','Ghana':'GHA','Haiti':'HAI','Iran':'IRN','Iraq':'IRQ','Ivory Coast':'CIV','Japan':'JPN','Jordan':'JOR','Mexico':'MEX','Morocco':'MAR','Netherlands':'HOL','New Zealand':'NZL','Norway':'NOR','Panama':'PAN','Paraguay':'PAR','Portugal':'POR','Qatar':'QAT','Saudi Arabia':'KSA','Scotland':'SCO','Senegal':'SEN','South Africa':'RSA','South Korea':'KOR','Spain':'ESP','Sweden':'SUE','Switzerland':'SUI','Tunisia':'TUN','Turkey':'TUR','USA':'USA','Uruguay':'URU','Uzbekistan':'UZB'}
@@ -49,10 +50,10 @@ const tend=(a,b)=>a>b?1:a<b?2:0
 const pts=(p,r)=>(p[0]===r[0]&&p[1]===r[1])?3:(tend(p[0],p[1])===tend(r[0],r[1])?1:0)
 const pois=l=>{let L=Math.exp(-l),x=0,p=1;do{x++;p*=Math.random()}while(p>L);return x-1}
 
-// Filas (índices de matches[]) de una fecha YYYY-MM-DD, vía Supabase
+// Filas (índices de matches[]) del día prode YYYY-MM-DD (ciclo 8am→8am ARG).
 async function rowsForDate(date){
-  const {data:ps}=await supabase.from('partidos').select('*').eq('fecha',date)
-  const keys=new Set((ps||[]).map(p=>esAb(p.equipo1)+'·'+esAb(p.equipo2)))
+  const ps = await partidosDelDia(supabase, date)
+  const keys=new Set(ps.map(p=>esAb(p.equipo1)+'·'+esAb(p.equipo2)))
   const out=[]; matches.forEach((l,r)=>{ if(keys.has(keyOf(l))) out.push(r) }); return out
 }
 
@@ -87,8 +88,8 @@ const proyeccionBoard = oddsData => simBoard(oddsData)              // torneo co
 // La moda de Poisson(λ) es floor(λ); la moda conjunta = (floor(λ1), floor(λ2)).
 async function resultadosDelDia(oddsData, date){
   const odds=buildLambdas(oddsData)
-  const {data:ps}=await supabase.from('partidos').select('*').eq('fecha',date).order('hora')
-  return (ps||[]).map(p=>{
+  const ps = (await partidosDelDia(supabase, date)).sort((a,b)=>(a.hora||'').localeCompare(b.hora||''))
+  return ps.map(p=>{
     // si ya se jugó, el resultado VÁLIDO es el real; si no, el más probable del mercado
     if(p.goles1!==null && p.goles2!==null) return {eq1:p.equipo1, eq2:p.equipo2, g1:p.goles1, g2:p.goles2, jugado:true}
     const t1=esAb(p.equipo1), t2=esAb(p.equipo2), o=odds[[t1,t2].sort().join('|')]
@@ -110,8 +111,8 @@ async function proyeccionTexto(oddsData){
 // (o el resultado real, si el partido ya se jugó). Devuelve { nombre: puntos }.
 async function puntosModales(oddsData, date){
   const odds=buildLambdas(oddsData)
-  const {data:ps}=await supabase.from('partidos').select('*').eq('fecha',date)
-  const real={}; for(const p of (ps||[])) if(p.goles1!==null) real[esAb(p.equipo1)+'·'+esAb(p.equipo2)]=[p.goles1,p.goles2]
+  const ps = await partidosDelDia(supabase, date)
+  const real={}; for(const p of ps) if(p.goles1!==null) real[esAb(p.equipo1)+'·'+esAb(p.equipo2)]=[p.goles1,p.goles2]
   const rows=await rowsForDate(date)
   const out={}; NAMES.forEach(n=>out[n]=0)
   for(const r of rows){
