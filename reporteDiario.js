@@ -3,7 +3,7 @@
 //   generarProbaHoyImg(oddsData,date)  -> CHANCES DE GANAR HOY (azul)
 //   generarReporteAgrupado(p,jug,pron) -> análisis de pronósticos (púrpura)
 const { createCanvas } = require('@napi-rs/canvas')
-const { proyeccionBoard, resultadosDelDia } = require('./proyeccion')
+const { proyeccionBoard, resultadosDelDia, tablaFinalDelDia } = require('./proyeccion')
 const { probaHoyBoard } = require('./proba_hoy')
 
 const S = 2
@@ -86,19 +86,19 @@ async function generarProbaImg(oddsData){
 }
 
 async function generarProbaHoyImg(oddsData, date){
-  const b=await probaHoyBoard(oddsData, date); if(!b) return null
+  const b=await tablaFinalDelDia(oddsData, date); if(!b) return null
   const res=await resultadosDelDia(oddsData, date)
-  const banda = res.length ? { titulo:'RESULTADO MÁS PROBABLE SEGÚN EL MERCADO',
-    lineas: res.map(r=> r.g1==null ? `${r.eq1}  vs  ${r.eq2}` : `${r.eq1}  ${r.g1} - ${r.g2}  ${r.eq2}`) } : null
+  const banda = res.length ? { titulo:'RESULTADOS DE HOY (estimados por las casas de apuestas)',
+    lineas: res.map(r=> r.g1==null ? `${r.eq1}  vs  ${r.eq2}` : `${r.eq1}  ${r.g1} - ${r.g2}  ${r.eq2}${r.jugado?'   · FINAL':''}`) } : null
   const W=524-32, f=`${date.slice(8,10)}/${date.slice(5,7)}`
   const cols=[
-    {x:0,   w:34, label:'#',          align:'center'},
-    {x:34,  w:280,label:'JUGADOR',    align:'left',  val:r=>nameUp(r.nombre), bold:true, size:13},
-    {x:314, w:90, label:'GANAR %',    align:'center',val:r=>`${r.winPct}%`, bold:true, size:13, color:r=>r.winPct>0?'#1a6b8a':'#bbb'},
-    {x:404, w:88, label:'PTS x RESULT', align:'center',val:r=>`${r.expectedPts}`,bold:true,size:13, color:()=>'#e67e22'},
+    {x:0,   w:34, label:'#',       align:'center'},
+    {x:34,  w:230,label:'JUGADOR', align:'left',  val:r=>nameUp(r.nombre), bold:true, size:13},
+    {x:264, w:110,label:'HOY',     align:'center',val:r=>`${r.hoy>0?'+':''}${r.hoy}`, bold:true, size:13, color:r=>r.hoy>0?'#e67e22':'#bbb'},
+    {x:374, w:118,label:'TOTAL',   align:'center',val:r=>`${r.total}`, bold:true, size:15, color:()=>'#1a6b8a'},
   ]
-  return tablaRanking({ titulo:`CHANCES DE GANAR HOY · ${f}`,
-    sub:`PTS x RESULT = puntos si pasan los resultados de arriba`, banda,
+  return tablaRanking({ titulo:`CÓMO QUEDA LA TABLA HOY · ${f}`,
+    sub:`tabla general si los partidos de hoy terminan según los resultados de arriba`, banda,
     cols, rows:b.rows, g1:'#7c3aed', g2:'#5b21b6', rowA:'#f5f0ff', rowB:'#ece3fb' })
 }
 

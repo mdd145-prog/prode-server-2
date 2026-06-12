@@ -181,6 +181,9 @@ module.exports = {
 
   captionOficial: () => pick(CAPTIONS_OFICIAL),
 
+  // Título del envío de las 8:01 (va solo, arriba de proba + proba_hoy)
+  tituloProba: () => `🎲 *Reportes de Probabilidades*`,
+
   captionDia: () => pick(CAPTIONS_DIA),
 
   gol: (eq1, g1, eq2, g2) => `Gol: ${eq1} ${g1} ${eq2} ${g2}`,

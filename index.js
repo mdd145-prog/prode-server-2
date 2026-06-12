@@ -12,17 +12,6 @@ const arnaldo = require('./arnaldo')
 const { generarProbaImg, generarProbaHoyImg, generarReporteAgrupado } = require('./reporteDiario')
 const PROBA_ACTIVO = true       // !proba / !proba_hoy habilitados (solo admin, ver senderIsAdmin)
 const PROBA_CRON_ACTIVO = true   // cron 8:01 ARG: difunde los reportes proba (HOY + torneo) al grupo
-// Bienvenida que explica !proba — se manda UNA sola vez, junto al reporte de las 8:01 de esta fecha.
-const BIENVENIDA_PROBA_FECHA = '2026-06-12'
-const MSG_BIENVENIDA_PROBA = `🎲 *¡Arrancó el Prode 2026!* 🎲
-
-Tirá *!proba* y mirá tus *chances reales de ganar el prode*.
-
-El cálculo está *vinculado a las líneas de las casas de apuestas*: agarramos las cuotas reales de cada partido y simulamos el Mundial miles de veces. Tu % es en cuántas de esas simulaciones terminás primero.
-
-Puntaje: *3 pts* resultado exacto · *1 pt* acertar ganador o empate.
-
-Suerte ⚽️`
 
 const app = express()
 app.use(express.json())
@@ -798,11 +787,11 @@ cron.schedule('1 11 * * *', async () => {
     const hoy = hoyARG()
     const { data: partidos } = await supabase.from('partidos').select('id').eq('fecha', hoy)
     if (!partidos?.length) return
-    if (hoy === BIENVENIDA_PROBA_FECHA) await enviarAlGrupo(MSG_BIENVENIDA_PROBA)
     const odds = await getOdds()
+    await enviarAlGrupo(arnaldo.tituloProba())                        // título solo
+    await enviarImagenAlGrupo(await generarProbaImg(odds), '')        // proba (torneo)
     const imgHoy = await generarProbaHoyImg(odds, hoy)
-    if (imgHoy) await enviarImagenAlGrupo(imgHoy, '')
-    await enviarImagenAlGrupo(await generarProbaImg(odds), '')
+    if (imgHoy) await enviarImagenAlGrupo(imgHoy, '')                 // proba_hoy (tabla del día)
     console.log('🎲 Reportes proba enviados (8:01)')
   } catch(e) { console.error('Error cron 8:01 proba:', e.message) }
 })

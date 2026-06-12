@@ -89,10 +89,12 @@ async function resultadosDelDia(oddsData, date){
   const odds=buildLambdas(oddsData)
   const {data:ps}=await supabase.from('partidos').select('*').eq('fecha',date).order('hora')
   return (ps||[]).map(p=>{
+    // si ya se jugó, el resultado VÁLIDO es el real; si no, el más probable del mercado
+    if(p.goles1!==null && p.goles2!==null) return {eq1:p.equipo1, eq2:p.equipo2, g1:p.goles1, g2:p.goles2, jugado:true}
     const t1=esAb(p.equipo1), t2=esAb(p.equipo2), o=odds[[t1,t2].sort().join('|')]
     if(!o) return {eq1:p.equipo1, eq2:p.equipo2, g1:null, g2:null}
     const [l1,l2]=o.home===t1?[o.lh,o.la]:[o.la,o.lh]
-    return {eq1:p.equipo1, eq2:p.equipo2, g1:Math.floor(l1), g2:Math.floor(l2)}
+    return {eq1:p.equipo1, eq2:p.equipo2, g1:Math.floor(l1), g2:Math.floor(l2), jugado:false}
   })
 }
 
@@ -122,7 +124,32 @@ async function puntosModales(oddsData, date){
   return out
 }
 
-module.exports = { simBoard, proyeccionBoard, proyeccionTexto, buildLambdas, rowsForDate, resultadosDelDia, puntosModales }
+// Tabla GENERAL hipotética al cierre del día: toma como válidos los resultados ya jugados
+// (de todo el torneo) + los resultados más probables del mercado para los partidos de HOY
+// que aún no se jugaron, y devuelve el ranking total resultante.
+// rows: {nombre, total (hipotético al cierre), hoy (lo que suma con los partidos de hoy)}
+async function tablaFinalDelDia(oddsData, date){
+  const odds=buildLambdas(oddsData)
+  const {data:partidos}=await supabase.from('partidos').select('*')
+  const real={}; for(const p of (partidos||[])) if(p.goles1!==null&&p.goles2!==null) real[esAb(p.equipo1)+'·'+esAb(p.equipo2)]=[p.goles1,p.goles2]
+  const hoyRows=await rowsForDate(date); if(!hoyRows.length) return null
+  const hoySet=new Set(hoyRows)
+  // resultados "válidos" por partido: real si finalizó, modal del mercado si es de hoy y falta
+  const validos={}
+  matches.forEach((l,r)=>{ const k=keyOf(l); if(real[k]) validos[r]=real[k] })
+  for(const r of hoyRows){
+    if(validos[r]) continue
+    const [t1,t2]=teamsOf(matches[r]); const o=odds[[t1,t2].sort().join('|')]; if(!o) continue
+    const [l1,l2]=o.home===t1?[o.lh,o.la]:[o.la,o.lh]; validos[r]=[Math.floor(l1),Math.floor(l2)]
+  }
+  const tot=new Array(N).fill(0), hoy=new Array(N).fill(0)
+  for(const r in validos){ const res=validos[r]
+    for(let c=0;c<N;c++){ const p=pts(data[c][r],res); tot[c]+=p; if(hoySet.has(+r)) hoy[c]+=p } }
+  const rows=NAMES.map((n,c)=>({nombre:n, total:tot[c], hoy:hoy[c]})).sort((a,b)=>b.total-a.total||b.hoy-a.hoy)
+  return { rows, dia:hoyRows.length, conResultado:Object.keys(validos).filter(r=>hoySet.has(+r)).length }
+}
+
+module.exports = { simBoard, proyeccionBoard, proyeccionTexto, buildLambdas, rowsForDate, resultadosDelDia, puntosModales, tablaFinalDelDia }
 
 // --- CLI standalone ---
 if (require.main === module) {
