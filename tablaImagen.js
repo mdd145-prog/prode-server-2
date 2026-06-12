@@ -207,7 +207,11 @@ async function generarTablaNoOficial(board, jugados = 0, liveMatches = []) {
 // ── IMAGEN DEL DÍA ────────────────────────────────────────
 async function generarImagenDia(partidos, jugadores, pronosticos, fecha) {
   // ordenar columnas por hora del partido (solo presentación, no toca datos)
-  partidos = [...partidos].sort((a, b) => (a.hora || '').localeCompare(b.hora || ''))
+  // Orden cronológico real (fecha+hora): en el ciclo prode 8am→8am los partidos
+  // de madrugada tienen fecha del día calendario siguiente, así van últimos (la
+  // 1am del 14 va después del 22:00 del 13), no primeros como con ordenar por hora.
+  partidos = [...partidos].sort((a, b) =>
+    ((a.fecha || '') + (a.hora || '')).localeCompare((b.fecha || '') + (b.hora || '')))
   const M        = 16
   const GAP      = 12
   const nM       = partidos.length

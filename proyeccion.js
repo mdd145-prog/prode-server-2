@@ -88,7 +88,9 @@ const proyeccionBoard = oddsData => simBoard(oddsData)              // torneo co
 // La moda de Poisson(λ) es floor(λ); la moda conjunta = (floor(λ1), floor(λ2)).
 async function resultadosDelDia(oddsData, date){
   const odds=buildLambdas(oddsData)
-  const ps = (await partidosDelDia(supabase, date)).sort((a,b)=>(a.hora||'').localeCompare(b.hora||''))
+  // Orden cronológico real (fecha+hora): la madrugada tiene fecha del día siguiente,
+  // así la 1am queda última en el ciclo prode 8am→8am, no primera.
+  const ps = (await partidosDelDia(supabase, date)).sort((a,b)=>((a.fecha||'')+(a.hora||'')).localeCompare((b.fecha||'')+(b.hora||'')))
   return ps.map(p=>{
     // si ya se jugó, el resultado VÁLIDO es el real; si no, el más probable del mercado
     if(p.goles1!==null && p.goles2!==null) return {eq1:p.equipo1, eq2:p.equipo2, g1:p.goles1, g2:p.goles2, jugado:true}
