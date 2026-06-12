@@ -697,11 +697,12 @@ async function verificarPartidosEnVivo(forzar = false) {
       else if (warmupHecho && cambio && state === 'in' && prev1 !== null && prev2 !== null) {
         const d1 = g1 - prev1, d2 = g2 - prev2
         if (d1 >= 0 && d2 >= 0 && d1 + d2 === 1) {
-          await enviarAlGrupo(arnaldo.gol(partido.equipo1, g1, partido.equipo2, g2))
+          const anoto = d1 === 1 ? partido.equipo1 : partido.equipo2
+          await enviarAlGrupo(arnaldo.gol(partido.equipo1, g1, partido.equipo2, g2, anoto))
           console.log(`⚽ Gol: ${partido.equipo1} ${g1}-${g2} ${partido.equipo2}`)
           setTimeout(async () => {
             try {
-              const { data: pAll } = await supabase.from('partidos').select('id,goles1,fecha,hora')
+              const { data: pAll } = await supabase.from('partidos').select('id,equipo1,equipo2,goles1,goles2,fecha,hora')
               const hoyFecha = diaProdeARG()
               const liveMatches = (pAll || []).filter(p => esDelDiaProde(p, hoyFecha) && p.goles1 !== null)
               const jugados = (pAll || []).filter(p => p.goles1 !== null).length
@@ -718,7 +719,7 @@ async function verificarPartidosEnVivo(forzar = false) {
         console.log(`🟢 Arrancó: ${partido.equipo1} vs ${partido.equipo2}`)
         setTimeout(async () => {
           try {
-            const { data: pAll } = await supabase.from('partidos').select('id,goles1,fecha,hora')
+            const { data: pAll } = await supabase.from('partidos').select('id,equipo1,equipo2,goles1,goles2,fecha,hora')
             const hoyFecha = diaProdeARG()
             const liveMatches = (pAll || []).filter(p => esDelDiaProde(p, hoyFecha) && p.goles1 !== null)
             const jugados = (pAll || []).filter(p => p.goles1 !== null).length

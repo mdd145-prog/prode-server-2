@@ -58,6 +58,24 @@ const CAMBIO_LIDER = [
   (n, v) => `🚨 *${n}* asume el liderazgo de la tabla. Felicitaciones por el desempeño.`,
 ]
 
+// ── ARRANQUE DE PARTIDO (jolgorio) ────────────────────────
+const ARRANQUE = [
+  (a, b) => `🟢⚽ ¡ARRANCÓ *${a}* vs *${b}*! 📣 Que ruede la pelota. Acá va la parcial (NO oficial), todos largan 0-0:`,
+  (a, b) => `📣🔥 ¡Comienza *${a}* vs *${b}*! A alentar que esto ya empezó 🙌 Tabla parcial (NO oficial), arranca 0-0:`,
+  (a, b) => `⚽🎉 ¡Rueda la pelota: *${a}* vs *${b}*! Mucha suerte a todos 🍀 Parcial en vivo (NO oficial), 0-0:`,
+  (a, b) => `🟢🟢 ¡Pitó el árbitro! Empieza *${a}* vs *${b}* ⚽🔥 Acá la parcial (NO oficial), todos en 0-0:`,
+  (a, b) => `🎺⚽ ¡Y arrancó *${a}* vs *${b}*! Que empiece la función 🎉 Parcial (NO oficial), salimos 0-0:`,
+]
+
+// ── GOL EN VIVO (jolgorio) ────────────────────────────────
+const GRITOS_GOL = [
+  (e1, g1, e2, g2, q) => `⚽🔥 ¡GOOOOL de *${q}*! 📣📣 ${e1} *${g1}-${g2}* ${e2}`,
+  (e1, g1, e2, g2, q) => `🥅🎉 ¡La metió *${q}*! Se mueve el marcador 👉 ${e1} *${g1}-${g2}* ${e2}`,
+  (e1, g1, e2, g2, q) => `📣⚡ ¡GOL! *${q}* lo grita con todo 🙌 ${e1} *${g1}-${g2}* ${e2}`,
+  (e1, g1, e2, g2, q) => `⚽🤩 ¡Festeja *${q}*! Se sacude la tabla 🔥 ${e1} *${g1}-${g2}* ${e2}`,
+  (e1, g1, e2, g2, q) => `🎆⚽ ¡GOOOL de *${q}*! A gritarlo 📣 ${e1} *${g1}-${g2}* ${e2}`,
+]
+
 // ── ANÁLISIS PREVIO (20 min antes de cada partido) ────────
 const INTROS_ANALISIS = [
   p => `⏰ En 20 minutos arranca *${p.equipo1} vs ${p.equipo2}*`,
@@ -186,9 +204,10 @@ module.exports = {
 
   captionDia: () => pick(CAPTIONS_DIA),
 
-  gol: (eq1, g1, eq2, g2) => `Gol: ${eq1} ${g1} ${eq2} ${g2}`,
+  // anoto = nombre del equipo que convirtió (para el grito festivo)
+  gol: (eq1, g1, eq2, g2, anoto) => pick(GRITOS_GOL)(eq1, g1, eq2, g2, anoto || eq1),
 
-  arranco: (eq1, eq2) => `🟢 ¡Comienza *${eq1}* vs *${eq2}*! Acá va la tabla parcial (NO oficial), arranca 0-0:`,
+  arranco: (eq1, eq2) => pick(ARRANQUE)(eq1, eq2),
 
   // ¿El texto menciona a Arnaldo por alguno de sus apodos?
   esMencion: texto => ALIAS_RE.test(texto),

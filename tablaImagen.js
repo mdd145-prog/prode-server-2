@@ -76,7 +76,7 @@ async function generarTablaGenerica(board, config) {
   // EN VIVO — texto en el gap blanco, sin color, sin altura extra
   if (liveMatches.length > 0) {
     const ABBR = {'México':'MEX','Sudáfrica':'RSA','Rep. de Corea':'KOR','Rep. Checa':'CHE','Canadá':'CAN','Bosnia Herz.':'BIH','Catar':'QAT','Suiza':'SUI','Brasil':'BRA','Marruecos':'MAR','Haití':'HAI','Escocia':'SCO','Estados Unidos':'USA','Paraguay':'PAR','Australia':'AUS','Turquía':'TUR','Alemania':'ALE','Curazao':'CUW','Costa de Marfil':'CIV','Ecuador':'ECU','Países Bajos':'HOL','Japón':'JPN','Suecia':'SUE','Túnez':'TUN','Bélgica':'BEL','Egipto':'EGP','Irán':'IRN','Nueva Zelanda':'NZL','España':'ESP','Cabo Verde':'CPV','Arabia Saudí':'KSA','Uruguay':'URU','Francia':'FRA','Senegal':'SEN','Noruega':'NOR','Irak':'IRQ','Argentina':'ARG','Argelia':'DZA','Austria':'AUT','Jordania':'JOR','Portugal':'POR','Colombia':'COL','Uzbekistán':'UZB','RD Congo':'COD','Inglaterra':'ING','Croacia':'CRO','Ghana':'GHA','Panamá':'PAN'}
-    const ab = n => ABBR[n] || n.slice(0,3).toUpperCase()
+    const ab = n => ABBR[n] || (n ? n.slice(0,3).toUpperCase() : '???')
     const parts = liveMatches.map(m => {
       const score = m.goles1 !== null ? `${m.goles1}-${m.goles2}` : '-'
       return `${ab(m.equipo1)} ${score} ${ab(m.equipo2)}`
