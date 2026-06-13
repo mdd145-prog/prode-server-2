@@ -301,6 +301,14 @@ async function handleMessage(sock, msg) {
       const img = await generarTablaChances(board, partidos || [])
       await sendImage(img, '')
     }
+    else if (texto === '!grupo') {
+      const prox = await proximoPartido()
+      if (!prox) { await sendText('No hay próximo partido a la vista'); return }
+      const { data: jugs }  = await supabase.from('jugadores').select('*').order('orden')
+      const preds = await fetchAllPronosticos()
+      const img = await generarReporteAgrupado(prox, jugs || [], preds || [])
+      await sendImage(img, '')
+    }
     else if (PROBA_ACTIVO && senderIsAdmin && texto === '!proba') {
       const odds = await getOdds()
       await sendImage(await generarProbaImg(odds), '')
@@ -317,6 +325,7 @@ async function handleMessage(sock, msg) {
         `!hoy → Partidos de hoy + pronósticos\n` +
         `!dia YYYY-MM-DD → Partidos de una fecha\n` +
         `!chances → Quién sigue en carrera\n` +
+        `!grupo → Pronósticos del próximo partido agrupados por marcador\n` +
         `!ayuda → Este mensaje\n\n` +
         `_Durante los partidos la tabla se manda automáticamente con cada gol y al final, así que !tabla queda en pausa hasta que terminen._`
       )
@@ -779,6 +788,23 @@ const VENTANA_POST = 160 * 60 * 1000        // 2h40 después del kickoff
 
 // ¿La hora `ahora` (epoch ms) cae dentro de la ventana [kickoff−20min, kickoff+2h40]
 // de algún partido? Define "horario de partidos" para el poll y para !tabla.
+// Próximo partido a jugarse: el de kickoff más cercano que todavía no se jugó.
+// Prioriza los que ya arrancaron o están por arrancar; si no hay futuros, cae al
+// más temprano sin jugar. Devuelve null si no hay nada cargado.
+async function proximoPartido() {
+  const { data: partidos } = await supabase.from('partidos').select('*').is('goles1', null)
+  const conKO = (partidos || [])
+    .filter(p => p.fecha && p.hora)
+    .map(p => ({ p, ko: Date.parse(`${p.fecha}T${p.hora}:00-03:00`) }))
+    .filter(x => !Number.isNaN(x.ko))
+    .sort((a, b) => a.ko - b.ko)
+  if (!conKO.length) return null
+  const ahora = Date.now()
+  // primer partido cuya ventana de fin (kickoff + 2h40) sigue por delante
+  const prox = conKO.find(x => x.ko + VENTANA_POST >= ahora)
+  return (prox || conKO[0]).p
+}
+
 function enVentanaPartido(partidos, ahora) {
   for (const p of partidos || []) {
     if (!p.hora || !p.fecha) continue
