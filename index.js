@@ -302,12 +302,14 @@ async function handleMessage(sock, msg) {
       await sendImage(img, '')
     }
     else if (texto === '!grupo') {
-      const prox = await proximoPartido()
-      if (!prox) { await sendText('No hay próximo partido a la vista'); return }
+      const prox = await proximosPartidos()
+      if (!prox.length) { await sendText('No hay próximo partido a la vista'); return }
       const { data: jugs }  = await supabase.from('jugadores').select('*').order('orden')
       const preds = await fetchAllPronosticos()
-      const img = await generarReporteAgrupado(prox, jugs || [], preds || [])
-      await sendImage(img, '')
+      for (const p of prox) {
+        const img = await generarReporteAgrupado(p, jugs || [], preds || [])
+        await sendImage(img, '')
+      }
     }
     else if (PROBA_ACTIVO && senderIsAdmin && texto === '!proba') {
       const odds = await getOdds()
@@ -791,18 +793,22 @@ const VENTANA_POST = 160 * 60 * 1000        // 2h40 después del kickoff
 // Próximo partido a jugarse: el de kickoff más cercano que todavía no se jugó.
 // Prioriza los que ya arrancaron o están por arrancar; si no hay futuros, cae al
 // más temprano sin jugar. Devuelve null si no hay nada cargado.
-async function proximoPartido() {
+// Devuelve TODOS los partidos pendientes que comparten el kickoff del
+// próximo a jugarse — para cubrir fixtures simultáneos (típico de la
+// última fecha de grupos, donde 2 partidos del mismo grupo arrancan
+// al mismo tiempo). Si no hay ninguno por delante, cae al último por
+// orden cronológico.
+async function proximosPartidos() {
   const { data: partidos } = await supabase.from('partidos').select('*').is('goles1', null)
   const conKO = (partidos || [])
     .filter(p => p.fecha && p.hora)
     .map(p => ({ p, ko: Date.parse(`${p.fecha}T${p.hora}:00-03:00`) }))
     .filter(x => !Number.isNaN(x.ko))
     .sort((a, b) => a.ko - b.ko)
-  if (!conKO.length) return null
+  if (!conKO.length) return []
   const ahora = Date.now()
-  // primer partido cuya ventana de fin (kickoff + 2h40) sigue por delante
-  const prox = conKO.find(x => x.ko + VENTANA_POST >= ahora)
-  return (prox || conKO[0]).p
+  const prox = conKO.find(x => x.ko + VENTANA_POST >= ahora) || conKO[0]
+  return conKO.filter(x => x.ko === prox.ko).map(x => x.p)
 }
 
 function enVentanaPartido(partidos, ahora) {
