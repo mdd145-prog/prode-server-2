@@ -31,18 +31,6 @@ function parseEliminado(rawName) {
   return { name, isElim }
 }
 
-// Tachado rojo horizontal sobre el texto, desde (x,y) ancho w.
-function drawStrikethrough(ctx, x, y, w) {
-  ctx.save()
-  ctx.strokeStyle = '#cc0000'
-  ctx.lineWidth = 1
-  ctx.beginPath()
-  ctx.moveTo(x, y)
-  ctx.lineTo(x + w, y)
-  ctx.stroke()
-  ctx.restore()
-}
-
 // X roja dibujada a mano como badge centrada en (x,y).
 function drawXBadge(ctx, x, y, size = 5) {
   ctx.save()
@@ -185,13 +173,10 @@ async function generarTablaGenerica(board, config) {
     const disp = nombre.length > 15 ? nombre.slice(0,15)+'…' : nombre
     ctx.font = 'bold 12px Arial'
     ctx.textAlign = 'left'
-    ctx.fillStyle = isElim ? '#999999' : '#1a1a1a'
     ctx.fillText(disp, cols[1].x + 8, cy)
     if (isElim) {
       const w = ctx.measureText(disp).width
-      drawStrikethrough(ctx, cols[1].x + 8, cy, w)
       drawXBadge(ctx, cols[1].x + 8 + w + 10, cy)
-      ctx.fillStyle = '#1a1a1a'
     }
 
     ctx.font = 'bold 15px Arial'
@@ -364,20 +349,15 @@ async function generarImagenDia(partidos, jugadores, pronosticos, fecha) {
     const { name: rawName, isElim } = parseEliminado(jug.nombre)
     const nombre = rawName.toUpperCase()
     const disp = nombre.length > 13 ? nombre.slice(0,13)+'…' : nombre
+    ctx.fillStyle = '#1a1a1a'
     ctx.font = 'bold 12px Arial'
     ctx.textAlign = 'left'
     ctx.textBaseline = 'middle'
-    const prefix = `${num} `
-    ctx.fillStyle = '#1a1a1a'
-    ctx.fillText(prefix, 18, cy)
-    const prefixW = ctx.measureText(prefix).width
-    ctx.fillStyle = isElim ? '#999999' : '#1a1a1a'
-    ctx.fillText(disp, 18 + prefixW, cy)
+    const full = `${num} ${disp}`
+    ctx.fillText(full, 18, cy)
     if (isElim) {
-      const w = ctx.measureText(disp).width
-      drawStrikethrough(ctx, 18 + prefixW, cy, w)
-      drawXBadge(ctx, 18 + prefixW + w + 10, cy)
-      ctx.fillStyle = '#1a1a1a'
+      const w = ctx.measureText(full).width
+      drawXBadge(ctx, 18 + w + 10, cy)
     }
     ctx.font = '12px Arial'
     partidos.forEach((p, pi) => {
@@ -465,14 +445,10 @@ async function generarTablaChances(board, partidos) {
     const nombre = rawName.toUpperCase()
     const disp = nombre.length>16?nombre.slice(0,16)+'…':nombre
     ctx.textAlign = 'left'
-    const prevFill = ctx.fillStyle
-    if (isElim) ctx.fillStyle = '#999999'
     ctx.fillText(disp, cols[1].x+6, cy)
     if (isElim) {
       const w = ctx.measureText(disp).width
-      drawStrikethrough(ctx, cols[1].x+6, cy, w)
       drawXBadge(ctx, cols[1].x+6 + w + 10, cy)
-      ctx.fillStyle = prevFill
     }
 
     ctx.font = 'bold 13px Arial'
@@ -552,16 +528,11 @@ async function generarTablaProba(results, sims=5000) {
     const barW=60, barH=6, filled=Math.round((p.winPct/maxWin)*barW)
     ctx.fillStyle='#e8e0d0'; ctx.fillRect(xBar,y-10,barW,barH)
     ctx.fillStyle=i===0?'#3d0070':i<3?'#7c3aed':'#aaaaaa'; ctx.fillRect(xBar,y-10,filled,barH)
-    ctx.font='12px monospace'; ctx.textAlign='left'
-    ctx.fillStyle=ink
-    ctx.fillText(num,xNum,y)
-    ctx.fillStyle = isElim ? '#999999' : ink
-    ctx.fillText(disp,xNombre,y)
+    ctx.fillStyle=ink; ctx.font='12px monospace'; ctx.textAlign='left'
+    ctx.fillText(num,xNum,y); ctx.fillText(disp,xNombre,y)
     if (isElim) {
       const w = ctx.measureText(disp).width
-      drawStrikethrough(ctx, xNombre, y - 4, w)
       drawXBadge(ctx, xNombre + w + 10, y - 4, 4)
-      ctx.fillStyle = ink
     }
     ctx.font='bold 12px monospace'; ctx.textAlign='right'
     ctx.fillText(`${p.winPct.toFixed(1)}%`,xWin,y)
