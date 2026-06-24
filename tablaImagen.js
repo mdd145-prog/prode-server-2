@@ -376,9 +376,16 @@ async function generarImagenDia(partidos, jugadores, pronosticos, fecha) {
 
 // ── TABLA CHANCES ─────────────────────────────────────────
 async function generarTablaChances(board, partidos) {
+  // Si el caller precomputó maxP/puede con la lógica tight (P-perfecto vs
+  // cada Q), respetar esos valores. Si no, fallback al cálculo conservador
+  // legado (tot + rem*3 >= top del líder actual).
   const rem = (partidos||[]).filter(p=>p.goles1===null).length
   const top = board[0]?.tot || 0
-  const data = board.map(p=>({...p, maxP: p.tot + rem*3, puede: p.tot + rem*3 >= top}))
+  const data = board.map(p=>({
+    ...p,
+    maxP:  p.maxP  != null ? p.maxP  : p.tot + rem*3,
+    puede: p.puede != null ? p.puede : (p.tot + rem*3) >= top
+  }))
 
   const M       = 20
   const GAP     = 12

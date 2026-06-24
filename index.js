@@ -297,8 +297,9 @@ async function handleMessage(sock, msg) {
     else if (texto === '!chances') {
       const board = await buildBoard()
       if (!board.length) { await sendText('No hay datos aún'); return }
+      const enriched = await buildChancesData(board)
       const { data: partidos } = await supabase.from('partidos').select('id,goles1')
-      const img = await generarTablaChances(board, partidos || [])
+      const img = await generarTablaChances(enriched, partidos || [])
       await sendImage(img, '')
     }
     else if (texto === '!grupo') {
@@ -612,6 +613,53 @@ async function calcProbaBoard() {
 
 
 
+
+// Calcula chances de ganar el torneo con el criterio tight (necesario y
+// suficiente): para cada jugador P, simula que sus pronósticos pendientes
+// son los resultados reales (P-perfecto, donde P saca el máximo posible).
+// Si en ese escenario algún Q queda con más puntos que P, entonces P está
+// eliminado matemáticamente — ya no existe combinación de resultados que
+// lo deje campeón.
+//
+// Devuelve el board enriquecido con:
+//   maxP   — total máximo alcanzable por P (puntos actuales + 3 × pendientes con pronóstico)
+//   puede  — true si P todavía puede salir 1º (al menos empatar)
+//   lider  — quién es el que lo elimina en el escenario P-perfecto (para info)
+async function buildChancesData(board) {
+  const { data: partidos } = await supabase.from('partidos').select('*')
+  const pronosticos = await fetchAllPronosticos()
+  const pendientes = (partidos || []).filter(p => p.goles1 === null)
+
+  const predsByPlayer = {}
+  for (const pr of (pronosticos || [])) {
+    if (!predsByPlayer[pr.jugador_id]) predsByPlayer[pr.jugador_id] = {}
+    predsByPlayer[pr.jugador_id][pr.partido_id] = pr
+  }
+
+  return board.map(P => {
+    const Ppreds = predsByPlayer[P.id] || {}
+    const Ppendientes = pendientes.filter(pa => {
+      const pp = Ppreds[pa.id]
+      return pp && pp.goles1 !== null && pp.goles2 !== null
+    })
+    const Pmax = P.tot + 3 * Ppendientes.length
+
+    let maxQ = -Infinity, lider = null
+    for (const Q of board) {
+      if (Q.id === P.id) continue
+      let Qtotal = Q.tot
+      for (const pa of Ppendientes) {
+        const Qpred = (predsByPlayer[Q.id] || {})[pa.id]
+        const Ppred = Ppreds[pa.id]
+        const simResult = { goles1: Ppred.goles1, goles2: Ppred.goles2 }
+        Qtotal += calcPts(Qpred, simResult) || 0
+      }
+      if (Qtotal > maxQ) { maxQ = Qtotal; lider = Q.nombre }
+    }
+    const puede = Pmax >= maxQ
+    return { ...P, maxP: Pmax, puede, lider }
+  })
+}
 
 async function chancesTexto() {
   const board = await buildBoard()
@@ -1059,8 +1107,9 @@ app.get('/preview/chances', async (req, res) => {
   try {
     const board = await buildBoard()
     if (!board.length) return res.send('No hay datos')
+    const enriched = await buildChancesData(board)
     const { data: partidos } = await supabase.from('partidos').select('id,goles1')
-    const img = await generarTablaChances(board, partidos||[])
+    const img = await generarTablaChances(enriched, partidos||[])
     res.setHeader('Content-Type','image/png'); res.send(img)
   } catch(e){res.status(500).send('Error: '+e.message)}
 })
