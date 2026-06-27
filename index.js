@@ -294,7 +294,7 @@ async function handleMessage(sock, msg) {
       const img = await generarImagenDia(pFecha, jugs || [], preds || [], fecha)
       await sendImage(img, '')
     }
-    else if (texto === '!chances') {
+    else if (senderIsAdmin && texto === '!chances') {
       const board = await buildBoard()
       if (!board.length) { await sendText('No hay datos aún'); return }
       const enriched = await buildChancesData(board)
@@ -327,7 +327,6 @@ async function handleMessage(sock, msg) {
         `!tabla → Tabla actual (solo fuera del horario de partidos)\n` +
         `!hoy → Partidos de hoy + pronósticos\n` +
         `!dia YYYY-MM-DD → Partidos de una fecha\n` +
-        `!chances → Quién sigue en carrera\n` +
         `!grupo → Pronósticos del próximo partido agrupados por marcador\n` +
         `!ayuda → Este mensaje\n\n` +
         `_Durante los partidos la tabla se manda automáticamente con cada gol y al final, así que !tabla queda en pausa hasta que terminen._`
@@ -341,6 +340,7 @@ async function handleMessage(sock, msg) {
         `!forzar\n` +
         `!resumen\n` +
         `!novedades\n` +
+        `!chances\n` +
         `!proba\n` +
         `!proba_hoy\n` +
         `!resultado E1 g1 E2 g2\n` +
@@ -358,6 +358,7 @@ async function handleMessage(sock, msg) {
         `*!forzar* → Fuerza el envío de la Tabla Oficial al grupo (útil si quedó algo a medias).\n\n` +
         `*!resumen* → Manda al grupo la grilla del día con todos los pronósticos.\n\n` +
         `*!novedades* → Manda al grupo el mensaje de novedades con el link a la web.\n\n` +
+        `*!chances* → Quién sigue en carrera matemática (puntos máximos posibles).\n\n` +
         `*!proba* → Chances de ganar el torneo: Monte Carlo con cuotas reales del mercado (GANAR%, CUOTA, HOY, PROY).\n\n` +
         `*!proba_hoy* → Cómo quedaría la tabla hoy si pasan los resultados más probables del mercado.\n\n` +
         `*!resultado E1 g1 E2 g2* → Carga manual de un resultado. Ej: !resultado Argentina 2 Francia 1.\n\n` +
